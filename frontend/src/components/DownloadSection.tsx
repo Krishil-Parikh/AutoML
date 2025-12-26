@@ -11,7 +11,7 @@ export default function DownloadSection({ sessionId }: DownloadSectionProps) {
 
   const downloadNotebook = async () => {
     try {
-      const response = await fetch('http://localhost:8000/download/notebook', {
+      const response = await fetch('https://automl-1smu.onrender.com/download/notebook', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -27,7 +27,8 @@ export default function ColumnManager({ sessionId, onComplete, onDataShapeChange
 
   const fetchColumns = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/info/${sessionId}`);
+      // const response = await fetch(`http://localhost:8000/info/${sessionId}`);
+      const response = await fetch('https://automl-1smu.onrender.com/info/${sessionId}');
       const data = await response.json();
       setColumns(data.columns);
       onDataShapeChange(data.shape);

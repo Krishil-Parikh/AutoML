@@ -25,7 +25,7 @@ export default function OutliersManager({ sessionId, onComplete }: OutliersManag
 
   const fetchSuggestions = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/suggestions/outliers/${sessionId}`);
+      const response = await fetch(`https://automl-1smu.onrender.com/suggestions/outliers/${sessionId}`);
       const data = await response.json();
       setSuggestions(data);
 

@@ -25,7 +25,7 @@ export default function EncodingManager({ sessionId, onComplete }: EncodingManag
 
   const fetchSuggestions = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/suggestions/encoding/${sessionId}`);
+      const response = await fetch(`https://automl-1smu.onrender.com/suggestions/encoding/${sessionId}`);
       const data = await response.json();
       setSuggestions(data);
 
