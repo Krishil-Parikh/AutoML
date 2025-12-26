@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { Upload, Database, Trash2, AlertCircle, BarChart3, Download, CheckCircle, Sparkles, TrendingUp, Layers, Settings } from 'lucide-react';
+import { Upload, Database, AlertCircle, BarChart3, Download, CheckCircle, Sparkles, TrendingUp, Layers, Settings } from 'lucide-react';
+
+// Components
+import LandingPage from './components/LandingPage';
 import FileUpload from './components/FileUpload';
 import ColumnManager from './components/ColumnManager';
 import MissingValuesManager from './components/MissingValuesManager';
@@ -14,6 +17,7 @@ import StepIndicator from './components/StepIndicator';
 type Step = 'upload' | 'columns' | 'missing' | 'outliers' | 'correlation' | 'encoding' | 'scaling' | 'analysis' | 'download';
 
 function App() {
+  const [hasStarted, setHasStarted] = useState(false);
   const [currentStep, setCurrentStep] = useState<Step>('upload');
   const [sessionId, setSessionId] = useState<string>('');
   const [dataShape, setDataShape] = useState<[number, number] | null>(null);
@@ -40,15 +44,23 @@ function App() {
     setCurrentStep(nextStep);
   };
 
+  // If the user hasn't clicked "Start" on the landing page yet, show the Intro
+  if (!hasStarted) {
+    return <LandingPage onStart={() => setHasStarted(true)} />;
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
-      <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiMwMDAwMDAiIGZpbGwtb3BhY2l0eT0iMC4wMiI+PHBhdGggZD0iTTM2IDE2YzAtMS4xLjktMiAyLTJzMiAuOSAyIDItLjkgMi0yIDItMi0uOS0yLTJ6bTAgMjBjMC0xLjEuOS0yIDItMnMyIC45IDIgMi0uOSAyLTIgMi0yLS45LTItMnpNMTYgMTZjMC0xLjEuOS0yIDItMnMyIC45IDIgMi0uOSAyLTIgMi0yLS45LTItMnptMCAyMGMwLTEuMS45LTIgMi0yczIgLjkgMiAyLS45IDItMiAyLTItLjktMi0yeiIvPjwvZz48L2c+PC9zdmc+')] opacity-40"></div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 animate-fade-in">
+      <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiMwMDAwMDAiIGZpbGwtb3BhY2l0eT0iMC4wMiI+PHBhdGggZD0iTTM2IDE2YzAtMS4xLjktMiAyLTJzMiAuOSAyIDItLjkgMi0yIDItMi0uOS0yLTJ6bTAgMjBjMC0xLjEuOS0yIDItMnMyIC45IDIgMi0uOSAyLTIgMi0yLS45LTItMnptMCAyMGMwLTEuMS45LTIgMi0yczIgLjkgMiAyLS45IDItMiAyLTItLjktMi0yeiIvPjwvZz48L2c+PC9zdmc+')] opacity-40 pointer-events-none"></div>
 
       <div className="relative">
         <header className="backdrop-blur-md bg-white/70 border-b border-slate-200 sticky top-0 z-50 shadow-sm">
           <div className="max-w-7xl mx-auto px-6 py-6">
             <div className="flex items-center space-x-3">
-              <div className="bg-gradient-to-br from-blue-500 to-cyan-500 p-3 rounded-xl shadow-lg transform hover:scale-105 transition-transform duration-300">
+              <div 
+                className="bg-gradient-to-br from-blue-500 to-cyan-500 p-3 rounded-xl shadow-lg cursor-pointer hover:scale-105 transition-transform duration-300"
+                onClick={() => setHasStarted(false)} // Option to go back to home
+              >
                 <Database className="w-7 h-7 text-white" />
               </div>
               <div>

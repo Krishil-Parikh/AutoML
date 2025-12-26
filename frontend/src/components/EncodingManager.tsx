@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Loader2, Settings, ChevronRight, Lightbulb, CheckCircle } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 interface Suggestion {
   column: string;
@@ -25,7 +26,7 @@ export default function EncodingManager({ sessionId, onComplete }: EncodingManag
 
   const fetchSuggestions = async () => {
     try {
-      const response = await fetch(`https://automl-1smu.onrender.com/suggestions/encoding/${sessionId}`);
+      const response = await fetch(`${API_BASE_URL}/suggestions/encoding/${sessionId}`);
       const data = await response.json();
       setSuggestions(data);
 
@@ -64,7 +65,7 @@ export default function EncodingManager({ sessionId, onComplete }: EncodingManag
   const handleApply = async () => {
     setProcessing(true);
     try {
-      await fetch('https://automl-1smu.onrender.com/clean/encoding', {
+      await fetch(`${API_BASE_URL}/clean/encoding`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

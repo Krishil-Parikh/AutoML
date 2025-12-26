@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Loader2, Layers, ChevronRight, AlertTriangle } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 interface CorrelationManagerProps {
   sessionId: string;
@@ -8,17 +9,18 @@ interface CorrelationManagerProps {
 
 export default function CorrelationManager({ sessionId, onComplete }: CorrelationManagerProps) {
   const [processing, setProcessing] = useState(false);
-  const [threshold] = useState(0.90);
+  // Default threshold set to 0.90, but now mutable
+  const [threshold, setThreshold] = useState(0.90);
 
   const handleAutoDrop = async () => {
     setProcessing(true);
     try {
-      await fetch('https://automl-1smu.onrender.com/clean/correlation', {
+      await fetch(`${API_BASE_URL}/clean/correlation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           session_id: sessionId,
-          threshold,
+          threshold, // Pass the user-customized threshold
           auto_drop: true,
         }),
       });
@@ -48,14 +50,42 @@ export default function CorrelationManager({ sessionId, onComplete }: Correlatio
         <div className="bg-violet-50 rounded-xl p-6 mb-6 border border-violet-200">
           <div className="flex items-start space-x-3">
             <AlertTriangle className="w-6 h-6 text-violet-600 flex-shrink-0 mt-0.5" />
-            <div>
+            <div className="w-full">
               <p className="text-sm text-violet-800 font-medium mb-2">About Correlation</p>
-              <p className="text-sm text-violet-600 mb-3">
-                Features with correlation {'>'}90% are redundant and can cause model instability. The system will automatically identify and remove highly correlated features.
+              <p className="text-sm text-violet-600 mb-4">
+                Features with correlation higher than the threshold are redundant and can cause model instability. The system will automatically identify and remove these features .
               </p>
-              <div className="bg-white/50 rounded-lg p-3 border border-violet-200">
-                <p className="text-xs text-violet-700 font-medium mb-1">Threshold: {threshold * 100}%</p>
-                <p className="text-xs text-violet-600">Features above this correlation will be dropped</p>
+              
+              {/* Threshold Slider Section */}
+              <div className="bg-white/50 rounded-lg p-4 border border-violet-200">
+                <div className="flex justify-between items-center mb-2">
+                  <label htmlFor="threshold-slider" className="text-sm text-violet-700 font-medium">
+                    Correlation Threshold: {(threshold * 100).toFixed(0)}%
+                  </label>
+                  <span className="text-xs text-violet-500 font-medium bg-violet-100 px-2 py-1 rounded">
+                    Recommended: 90%
+                  </span>
+                </div>
+                
+                <input
+                  id="threshold-slider"
+                  type="range"
+                  min="0.5"
+                  max="1.0"
+                  step="0.01"
+                  value={threshold}
+                  onChange={(e) => setThreshold(parseFloat(e.target.value))}
+                  className="w-full h-2 bg-violet-200 rounded-lg appearance-none cursor-pointer accent-violet-600 hover:accent-violet-700 transition-all"
+                />
+                
+                <div className="flex justify-between mt-2 text-xs text-violet-400">
+                  <span>50% (Aggressive Removal)</span>
+                  <span>100% (Keep All)</span>
+                </div>
+                
+                <p className="text-xs text-violet-600 mt-3 border-t border-violet-100 pt-2">
+                  Features with correlation &gt; {(threshold * 100).toFixed(0)}% will be dropped.
+                </p>
               </div>
             </div>
           </div>

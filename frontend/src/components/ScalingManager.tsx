@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Loader2, Sparkles, ChevronRight, Lightbulb, CheckCircle } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 interface Suggestion {
   column: string;
@@ -25,7 +26,7 @@ export default function ScalingManager({ sessionId, onComplete }: ScalingManager
 
   const fetchSuggestions = async () => {
     try {
-      const response = await fetch(`https://automl-1smu.onrender.com/suggestions/scaling/${sessionId}`);
+      const response = await fetch(`${API_BASE_URL}/suggestions/scaling/${sessionId}`);
       const data = await response.json();
       setSuggestions(data);
 
@@ -64,7 +65,7 @@ export default function ScalingManager({ sessionId, onComplete }: ScalingManager
   const handleApply = async () => {
     setProcessing(true);
     try {
-      await fetch('https://automl-1smu.onrender.com/clean/scaling', {
+      await fetch(`${API_BASE_URL}/clean/scaling`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

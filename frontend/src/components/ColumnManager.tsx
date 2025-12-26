@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Loader2, Trash2, ChevronRight, Database, Info } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 interface Column {
   id: number;
@@ -28,7 +29,7 @@ export default function ColumnManager({ sessionId, onComplete, onDataShapeChange
   const fetchColumns = async () => {
     try {
       // const response = await fetch(`http://localhost:8000/info/${sessionId});
-      const response = await fetch(`https://automl-1smu.onrender.com/info/${sessionId}`);
+      const response = await fetch(`${API_BASE_URL}/info/${sessionId}`);
       const data = await response.json();
       setColumns(data.columns);
       onDataShapeChange(data.shape);
@@ -57,7 +58,7 @@ export default function ColumnManager({ sessionId, onComplete, onDataShapeChange
 
     setProcessing(true);
     try {
-      const response = await fetch('https://automl-1smu.onrender.com/clean/drop', {
+      const response = await fetch(`${API_BASE_URL}/clean/drop`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

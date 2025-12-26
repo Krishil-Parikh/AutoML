@@ -15,11 +15,12 @@ import matplotlib
 matplotlib.use('Agg')
 from fastapi import FastAPI, File, UploadFile, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 import uuid
-import shutil
 import io
+import zipfile
+from pymongo import MongoClient
 
 import httpx
 from fastapi import FastAPI
@@ -27,6 +28,14 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from contextlib import asynccontextmanager
 
 HEALTH_ENDPOINT_URL = "https://automl-1smu.onrender.com/health"
+
+# MongoDB setup
+MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "automl")
+_mongo_client = MongoClient(MONGODB_URI)
+_mongo_db = _mongo_client[MONGO_DB_NAME]
+_sessions_col = _mongo_db["sessions"]
+_logs_col = _mongo_db["session_logs"]
 
 # 1. Define the specific job function
 async def check_health_job():
@@ -72,14 +81,7 @@ app.add_middleware(
 # ==========================================
 # 1. NOTEBOOK GENERATOR FUNCTION
 # ==========================================
-def save_to_ipynb(log_steps, filename="preprocessing_workflow.ipynb"):
-    """
-    Saves the recorded workflow steps into a .ipynb file.
-    """
-    if not filename.endswith('.ipynb'):
-        filename += '.ipynb'
-        
-    # Create the notebook structure
+def _build_notebook_structure(log_steps):
     notebook = {
         "cells": [],
         "metadata": {
@@ -102,7 +104,6 @@ def save_to_ipynb(log_steps, filename="preprocessing_workflow.ipynb"):
         "nbformat_minor": 4
     }
 
-    # Helper to create a code cell
     def create_code_cell(source_lines):
         return {
             "cell_type": "code",
@@ -112,7 +113,6 @@ def save_to_ipynb(log_steps, filename="preprocessing_workflow.ipynb"):
             "source": [line + "\n" for line in source_lines]
         }
 
-    # Helper to create markdown cell
     def create_markdown_cell(text):
         return {
             "cell_type": "markdown",
@@ -120,7 +120,6 @@ def save_to_ipynb(log_steps, filename="preprocessing_workflow.ipynb"):
             "source": [text]
         }
 
-    # Add Import Cell
     imports = [
         "import pandas as pd",
         "import numpy as np",
@@ -133,12 +132,19 @@ def save_to_ipynb(log_steps, filename="preprocessing_workflow.ipynb"):
     ]
     notebook["cells"].append(create_code_cell(imports))
 
-    # Add User Steps
     for step_name, code_lines in log_steps:
-        # Add a markdown header for the step
         notebook["cells"].append(create_markdown_cell(f"### {step_name}"))
-        # Add the code
         notebook["cells"].append(create_code_cell(code_lines))
+
+    return notebook
+
+
+def save_to_ipynb(log_steps, filename="preprocessing_workflow.ipynb"):
+    """Saves the recorded workflow steps into a .ipynb file."""
+    if not filename.endswith('.ipynb'):
+        filename += '.ipynb'
+
+    notebook = _build_notebook_structure(log_steps)
 
     try:
         with open(filename, 'w') as f:
@@ -146,6 +152,11 @@ def save_to_ipynb(log_steps, filename="preprocessing_workflow.ipynb"):
         print(f"\nSuccessfully generated notebook: {os.path.abspath(filename)}")
     except Exception as e:
         print(f"Error saving notebook: {e}")
+
+
+def notebook_bytes(log_steps):
+    notebook = _build_notebook_structure(log_steps)
+    return json.dumps(notebook, indent=4).encode('utf-8')
 
 # ==========================================
 # 2. DATA LOADING
@@ -1568,31 +1579,35 @@ def handle_feature_scaling(df, df_info, log_list=None):
 # ==========================================
 """
 FastAPI Backend Endpoints
-- Lightweight CSV-based session storage to avoid extra dependencies.
-- Mirrors the interactive logic with plan-based endpoints.
+- MongoDB-backed session storage.
 """
 
-STORAGE_DIR = "temp_storage"
-PLOTS_DIR = "plots"
-os.makedirs(STORAGE_DIR, exist_ok=True)
-os.makedirs(PLOTS_DIR, exist_ok=True)
-
-_SESSION_LOGS: dict = {}
-
-def _session_path(session_id: str) -> str:
-    return os.path.join(STORAGE_DIR, f"{session_id}.csv")
-
 def _load_df(session_id: str) -> pd.DataFrame:
-    path = _session_path(session_id)
-    if not os.path.exists(path):
+    doc = _sessions_col.find_one({"_id": session_id}, {"data": 1})
+    if not doc:
         raise HTTPException(status_code=404, detail="Session not found")
-    return pd.read_csv(path)
+    return pd.DataFrame(doc.get("data", []))
+
 
 def _save_df(session_id: str, df: pd.DataFrame) -> None:
-    df.to_csv(_session_path(session_id), index=False)
+    _sessions_col.update_one(
+        {"_id": session_id},
+        {"$set": {"data": df.to_dict(orient="records")}},
+        upsert=True,
+    )
+
 
 def _log(session_id: str, step: str, code_lines: list[str]) -> None:
-    _SESSION_LOGS.setdefault(session_id, []).append((step, code_lines))
+    _logs_col.update_one(
+        {"_id": session_id},
+        {"$push": {"logs": {"step": step, "code_lines": code_lines}}},
+        upsert=True,
+    )
+
+
+def _get_logs(session_id: str) -> list[dict]:
+    doc = _logs_col.find_one({"_id": session_id}, {"logs": 1})
+    return doc.get("logs", []) if doc else []
 
 class DropColumnsModel(BaseModel):
     session_id: str
@@ -1627,10 +1642,13 @@ def health():
 @app.post("/upload")
 async def upload(file: UploadFile = File(...)):
     session_id = str(uuid.uuid4())
-    temp_csv = _session_path(session_id)
-    with open(temp_csv, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    df = pd.read_csv(temp_csv)
+    try:
+        file.file.seek(0)
+        df = pd.read_csv(file.file)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read CSV: {e}")
+
+    _save_df(session_id, df)
     _log(session_id, "Load Data", [
         f"file_path = '{file.filename}'",
         "df = pd.read_csv(file_path)",
@@ -1919,34 +1937,42 @@ def api_plot_univariate(session_id: str, column_name: str):
 
 @app.get("/plots/univariate/{session_id}")
 def api_plot_all_univariate(session_id: str):
-    """Generate combined univariate plots for all numeric columns and save to plots/"""
+    """Generate univariate plots for all numeric columns and stream as a zip archive."""
     df = _load_df(session_id)
     nums = df.select_dtypes(include=['float64', 'int64']).columns
     
     if len(nums) == 0:
         raise HTTPException(status_code=400, detail="No numeric columns found")
     
-    saved_files = []
-    for col in nums:
-        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-        
-        sns.histplot(df[col], kde=True, ax=axes[0], color='skyblue')
-        axes[0].set_title(f'Distribution of {col}')
-        axes[0].grid(alpha=0.3)
-        
-        sns.boxplot(x=df[col], ax=axes[1], color='lightcoral')
-        axes[1].set_title(f'Boxplot of {col}')
-        axes[1].grid(alpha=0.3)
-        
-        plt.tight_layout()
-        
-        filename = f"{col.replace(' ', '_')}_univariate.png"
-        filepath = os.path.join(PLOTS_DIR, filename)
-        plt.savefig(filepath, dpi=300, bbox_inches='tight')
-        plt.close(fig)
-        saved_files.append(filename)
-    
-    return {"message": f"Generated {len(saved_files)} plots", "files": saved_files, "location": os.path.abspath(PLOTS_DIR)}
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for col in nums:
+            fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+            sns.histplot(df[col], kde=True, ax=axes[0], color='skyblue')
+            axes[0].set_title(f'Distribution of {col}')
+            axes[0].grid(alpha=0.3)
+
+            sns.boxplot(x=df[col], ax=axes[1], color='lightcoral')
+            axes[1].set_title(f'Boxplot of {col}')
+            axes[1].grid(alpha=0.3)
+
+            plt.tight_layout()
+
+            img_buf = io.BytesIO()
+            plt.savefig(img_buf, format='png', dpi=300, bbox_inches='tight')
+            plt.close(fig)
+            img_buf.seek(0)
+
+            filename = f"{col.replace(' ', '_')}_univariate.png"
+            zipf.writestr(filename, img_buf.getvalue())
+
+    zip_buffer.seek(0)
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=univariate_plots.zip"},
+    )
 
 @app.get("/plots/bivariate/heatmap/{session_id}")
 def api_plot_heatmap(session_id: str, method: str = "pearson"):
@@ -1991,10 +2017,6 @@ def api_plot_pairplot(session_id: str, max_cols: int = 10):
     pairplot_fig = sns.pairplot(df[nums], diag_kind='kde', plot_kws={'alpha': 0.6})
     pairplot_fig.fig.suptitle('Pairplot of Numeric Features', y=1.02, fontsize=16)
 
-    filename = "pairplot.png"
-    filepath = os.path.join(PLOTS_DIR, filename)
-    pairplot_fig.savefig(filepath, dpi=150, bbox_inches='tight')
-
     buf = io.BytesIO()
     pairplot_fig.fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
     buf.seek(0)
@@ -2005,18 +2027,29 @@ def api_plot_pairplot(session_id: str, max_cols: int = 10):
 
 @app.post("/download/notebook")
 def api_download_notebook(session_id: str = Body(..., embed=True), filename: str = Body("workflow", embed=True)):
-    logs = _SESSION_LOGS.get(session_id, [])
+    logs = _get_logs(session_id)
     if not logs:
         raise HTTPException(status_code=404, detail="No logs found for session")
-    save_to_ipynb(logs, filename=f"{filename}.ipynb")
-    return FileResponse(os.path.abspath(filename + ".ipynb"), filename=filename + ".ipynb")
+
+    formatted_logs = [(entry.get("step"), entry.get("code_lines", [])) for entry in logs]
+    nb_bytes = notebook_bytes(formatted_logs)
+    download_name = filename if filename.endswith(".ipynb") else f"{filename}.ipynb"
+
+    return StreamingResponse(
+        io.BytesIO(nb_bytes),
+        media_type="application/x-ipynb+json",
+        headers={"Content-Disposition": f"attachment; filename={download_name}"},
+    )
 
 @app.get("/download/csv/{session_id}")
 def api_download_csv(session_id: str):
-    path = _session_path(session_id)
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Session not found")
-    return FileResponse(os.path.abspath(path), filename="clean_data.csv")
+    df = _load_df(session_id)
+    csv_bytes = df.to_csv(index=False).encode("utf-8")
+    return StreamingResponse(
+        io.BytesIO(csv_bytes),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=clean_data.csv"},
+    )
 
 @app.get("/health")
 async def health_check():

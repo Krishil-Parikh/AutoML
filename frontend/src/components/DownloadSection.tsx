@@ -1,4 +1,5 @@
 import { Download, FileText, FileCode, CheckCircle } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 interface DownloadSectionProps {
   sessionId: string;
@@ -6,12 +7,12 @@ interface DownloadSectionProps {
 
 export default function DownloadSection({ sessionId }: DownloadSectionProps) {
   const downloadCSV = () => {
-    window.open(`https://automl-1smu.onrender.com/download/csv/${sessionId}`, '_blank');
+    window.open(`${API_BASE_URL}/download/csv/${sessionId}`, '_blank');
   };
 
   const downloadNotebook = async () => {
     try {
-      const response = await fetch('https://automl-1smu.onrender.com/download/notebook', {
+      const response = await fetch(`${API_BASE_URL}/download/notebook`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
