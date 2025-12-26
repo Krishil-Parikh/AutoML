@@ -1,1 +1,1 @@
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://automl-1smu.onrenderer.com';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://automl-1smu.onrender.com';
