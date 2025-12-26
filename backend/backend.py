@@ -1990,6 +1990,39 @@ def api_download_csv(session_id: str):
 async def health_check():
     return {"status": "healthy", "uptime": "ok"}
 
+import httpx
+from fastapi import FastAPI
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from contextlib import asynccontextmanager
+
+HEALTH_ENDPOINT_URL = "https://automl-1smu.onrender.com/health"
+
+# 1. Define the specific job function
+async def check_health_job():
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(HEALTH_ENDPOINT_URL)
+            print(f"[Scheduler] Health check: {response.status_code}")
+        except Exception as e:
+            print(f"[Scheduler] Error: {e}")
+
+# 2. Initialize Scheduler
+scheduler = AsyncIOScheduler()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # STARTUP: Add job and start scheduler
+    scheduler.add_job(check_health_job, 'interval', minutes=10)
+    scheduler.start()
+    print("Scheduler started.")
+    
+    yield
+    
+    # SHUTDOWN
+    scheduler.shutdown()
+
+app = FastAPI(lifespan=lifespan)
+
 if __name__ == "__main__":
     # Initialize Log List
     notebook_log = []
