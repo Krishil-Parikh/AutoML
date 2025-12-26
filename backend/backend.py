@@ -26,13 +26,16 @@ import httpx
 from fastapi import FastAPI
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from contextlib import asynccontextmanager
+import certifi
 
 HEALTH_ENDPOINT_URL = "https://automl-1smu.onrender.com/health"
 
 # MongoDB setup
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "automl")
-_mongo_client = MongoClient(MONGODB_URI)
+
+# Create a new client and connect to the server
+_mongo_client = MongoClient(MONGODB_URI, tlsCAFile=certifi.where())
 _mongo_db = _mongo_client[MONGO_DB_NAME]
 _sessions_col = _mongo_db["sessions"]
 _logs_col = _mongo_db["session_logs"]
