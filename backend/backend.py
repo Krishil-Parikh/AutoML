@@ -10,6 +10,17 @@ import scipy.stats as stats
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 
+# FastAPI additions
+import matplotlib
+matplotlib.use('Agg')
+from fastapi import FastAPI, File, UploadFile, HTTPException, Body
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel
+import uuid
+import shutil
+import io
+
 # ==========================================
 # 1. NOTEBOOK GENERATOR FUNCTION
 # ==========================================
@@ -122,7 +133,8 @@ def get_df_info(df):
     df_info = pd.DataFrame({
         'id': range(1, len(df.columns) + 1),
         'column_name': df.columns,
-        'dtype': dtypes.values,
+        # Ensure dtype is JSON-serializable for FastAPI responses
+        'dtype': dtypes.astype(str).values,
         'percentage_unique': unique_percentages.values,
         'percentage_missing': missing_percentages.values
     })
@@ -1506,6 +1518,474 @@ def handle_feature_scaling(df, df_info, log_list=None):
 # ==========================================
 # 11. MAIN EXECUTION FLOW
 # ==========================================
+"""
+FastAPI Backend Endpoints
+- Lightweight CSV-based session storage to avoid extra dependencies.
+- Mirrors the interactive logic with plan-based endpoints.
+"""
+
+app = FastAPI(title="AutoEDA API (single-file)")
+
+# CORS to allow frontend (Vite) during development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost",
+        "http://127.0.0.1",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+STORAGE_DIR = "temp_storage"
+PLOTS_DIR = "plots"
+os.makedirs(STORAGE_DIR, exist_ok=True)
+os.makedirs(PLOTS_DIR, exist_ok=True)
+
+_SESSION_LOGS: dict = {}
+
+def _session_path(session_id: str) -> str:
+    return os.path.join(STORAGE_DIR, f"{session_id}.csv")
+
+def _load_df(session_id: str) -> pd.DataFrame:
+    path = _session_path(session_id)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Session not found")
+    return pd.read_csv(path)
+
+def _save_df(session_id: str, df: pd.DataFrame) -> None:
+    df.to_csv(_session_path(session_id), index=False)
+
+def _log(session_id: str, step: str, code_lines: list[str]) -> None:
+    _SESSION_LOGS.setdefault(session_id, []).append((step, code_lines))
+
+class DropColumnsModel(BaseModel):
+    session_id: str
+    column_ids: list[int]
+
+class MissingValuesPlan(BaseModel):
+    session_id: str
+    plan: dict[str, list[int]]
+
+class OutlierPlan(BaseModel):
+    session_id: str
+    plan: dict[str, list[int]]
+
+class CorrelationPlan(BaseModel):
+    session_id: str
+    threshold: float = 0.90
+    plan: dict[str, list[int]] | None = None
+    auto_drop: bool = False
+
+class EncodingPlan(BaseModel):
+    session_id: str
+    plan: dict[str, list[int]]
+
+class ScalingPlan(BaseModel):
+    session_id: str
+    plan: dict[str, list[int]]
+
+@app.get("/")
+def health():
+    return {"status": "ok"}
+
+@app.post("/upload")
+async def upload(file: UploadFile = File(...)):
+    session_id = str(uuid.uuid4())
+    temp_csv = _session_path(session_id)
+    with open(temp_csv, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    df = pd.read_csv(temp_csv)
+    _log(session_id, "Load Data", [
+        f"file_path = '{file.filename}'",
+        "df = pd.read_csv(file_path)",
+        "print(df.shape)",
+        "df.head()"
+    ])
+    info = get_df_info(df)
+    return {"session_id": session_id, "shape": df.shape, "columns": info.to_dict(orient="records")}
+
+@app.get("/info/{session_id}")
+def info(session_id: str):
+    df = _load_df(session_id)
+    return {"shape": df.shape, "columns": get_df_info(df).to_dict(orient="records")}
+
+@app.post("/clean/drop")
+def api_drop_columns(payload: DropColumnsModel):
+    df = _load_df(payload.session_id)
+    cols = list(df.columns)
+    to_drop = [cols[cid-1] for cid in payload.column_ids if 1 <= cid <= len(cols)]
+    if to_drop:
+        df = df.drop(columns=to_drop)
+        _save_df(payload.session_id, df)
+        _log(payload.session_id, "Drop Columns", [
+            f"columns_to_drop = {to_drop}",
+            "df.drop(columns=columns_to_drop, inplace=True)",
+        ])
+    return {"message": "ok", "columns": get_df_info(df).to_dict(orient="records")}
+
+@app.get("/suggestions/missing/{session_id}")
+def api_missing_suggestions(session_id: str):
+    df = _load_df(session_id)
+    info_df = get_df_info(df)
+    missing_cols = info_df[info_df['percentage_missing'] > 0]
+    suggestions = {}
+    for _, row in missing_cols.iterrows():
+        col = row['column_name']
+        pct = row['percentage_missing']
+        dtype = df[col].dtype
+        if pct > 50:
+            action = 'drop_col'
+        elif is_object_dtype(dtype) or isinstance(dtype, pd.CategoricalDtype):
+            action = 'mode'
+        else:
+            skew = df[col].dropna().skew() if df[col].dropna().size else 0
+            action = 'median' if abs(skew) > 1 else 'mean'
+        suggestions[row['id']] = {"column": col, "missing_pct": pct, "suggested_action": action}
+    return suggestions
+
+@app.post("/clean/missing")
+def api_missing_apply(payload: MissingValuesPlan):
+    df = _load_df(payload.session_id)
+    cols = list(df.columns)
+    logs = []
+    for action, ids in payload.plan.items():
+        for cid in ids:
+            if not (1 <= cid <= len(cols)): continue
+            col = cols[cid-1]
+            is_cat = is_object_dtype(df[col]) or isinstance(df[col].dtype, pd.CategoricalDtype)
+            if action in ['mean', 'median'] and is_cat:
+                try:
+                    df[col] = pd.to_numeric(df[col], errors='raise')
+                    logs.append(f"df['{col}'] = pd.to_numeric(df['{col}'], errors='raise')")
+                except Exception:
+                    continue
+            if action == 'mean':
+                val = df[col].mean()
+                df[col] = df[col].fillna(val)
+                logs.append(f"df['{col}'].fillna(df['{col}'].mean(), inplace=True)")
+            elif action == 'median':
+                val = df[col].median()
+                df[col] = df[col].fillna(val)
+                logs.append(f"df['{col}'].fillna(df['{col}'].median(), inplace=True)")
+            elif action == 'mode':
+                mode_val = df[col].mode()
+                if not mode_val.empty:
+                    df[col] = df[col].fillna(mode_val.iloc[0])
+                    logs.append(f"df['{col}'].fillna(df['{col}'].mode()[0], inplace=True)")
+            elif action == 'drop_col':
+                df = df.drop(columns=[col])
+                logs.append(f"df.drop(columns=['{col}'], inplace=True)")
+    _save_df(payload.session_id, df)
+    if logs:
+        _log(payload.session_id, "Handle Missing Values", logs)
+    return {"message": "ok", "columns": get_df_info(df).to_dict(orient="records")}
+
+@app.get("/suggestions/outliers/{session_id}")
+def api_outliers_suggestions(session_id: str):
+    df = _load_df(session_id)
+    numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
+    suggestions = {}
+    for col in numeric_cols:
+        Q1 = df[col].quantile(0.25)
+        Q3 = df[col].quantile(0.75)
+        IQR = Q3 - Q1
+        cnt = ((df[col] < (Q1 - 1.5*IQR)) | (df[col] > (Q3 + 1.5*IQR))).sum()
+        pct = (cnt / len(df)) * 100
+        if cnt > 0:
+            col_id = df.columns.get_loc(col) + 1
+            action = 'remove_rows' if pct > 10 else 'cap'
+            suggestions[col_id] = {"column": col, "outliers_pct": round(pct, 2), "suggested_action": action}
+    return suggestions
+
+@app.post("/clean/outliers")
+def api_outliers_apply(payload: OutlierPlan):
+    df = _load_df(payload.session_id)
+    cols = list(df.columns)
+    logs = []
+    for action, ids in payload.plan.items():
+        for cid in ids:
+            if not (1 <= cid <= len(cols)): continue
+            col = cols[cid-1]
+            if not pd.api.types.is_numeric_dtype(df[col]): continue
+            Q1 = df[col].quantile(0.25)
+            Q3 = df[col].quantile(0.75)
+            IQR = Q3 - Q1
+            lower, upper = Q1 - 1.5*IQR, Q3 + 1.5*IQR
+            if action == 'cap':
+                df[col] = df[col].clip(lower=lower, upper=upper)
+                logs.append(f"Q1=df['{col}'].quantile(0.25);Q3=df['{col}'].quantile(0.75);IQR=Q3-Q1;df['{col}']=df['{col}'].clip(Q1-1.5*IQR,Q3+1.5*IQR)")
+            elif action == 'remove_rows':
+                df = df[(df[col] >= lower) & (df[col] <= upper)]
+                logs.append(f"Q1=df['{col}'].quantile(0.25);Q3=df['{col}'].quantile(0.75);IQR=Q3-Q1;df=df[(df['{col}']>=Q1-1.5*IQR)&(df['{col}']<=Q3+1.5*IQR)]")
+    _save_df(payload.session_id, df)
+    if logs:
+        _log(payload.session_id, "Handle Outliers", logs)
+    return {"message": "ok", "shape": df.shape}
+
+@app.post("/clean/correlation")
+def api_corr(payload: CorrelationPlan):
+    df = _load_df(payload.session_id)
+    nums = df.select_dtypes(include=['float64', 'int64']).columns
+    if len(nums) < 2:
+        return {"message": "not enough numeric columns"}
+    corr_matrix = df[nums].corr().abs()
+    upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+    high_corr_cols = [c for c in upper.columns if any(upper[c] > payload.threshold)]
+    logs = []
+    if payload.auto_drop and high_corr_cols:
+        df = df.drop(columns=high_corr_cols)
+        logs.append(f"df.drop(columns={high_corr_cols}, inplace=True)")
+        _save_df(payload.session_id, df)
+        _log(payload.session_id, "Handle Multicollinearity", logs)
+        return {"message": "auto-dropped", "dropped": high_corr_cols}
+    if payload.plan and 'drop' in payload.plan:
+        cols = list(df.columns)
+        to_drop = [cols[cid-1] for cid in payload.plan['drop'] if 1 <= cid <= len(cols)]
+        if to_drop:
+            df = df.drop(columns=to_drop)
+            logs.append(f"df.drop(columns={to_drop}, inplace=True)")
+            _save_df(payload.session_id, df)
+            _log(payload.session_id, "Handle Multicollinearity", logs)
+            return {"message": "dropped", "dropped": to_drop}
+    return {"message": "detected", "columns_to_drop": high_corr_cols}
+
+@app.get("/suggestions/encoding/{session_id}")
+def api_encoding_suggestions(session_id: str):
+    df = _load_df(session_id)
+    cats = df.select_dtypes(include=['object', 'category']).columns
+    suggestions = {}
+    for col in cats:
+        col_id = df.columns.get_loc(col) + 1
+        unique = df[col].nunique()
+        action = 'one_hot' if unique <= 10 else 'label'
+        suggestions[col_id] = {"column": col, "unique": int(unique), "suggested_action": action}
+    return suggestions
+
+@app.post("/clean/encoding")
+def api_encoding_apply(payload: EncodingPlan):
+    df = _load_df(payload.session_id)
+    cols = list(df.columns)
+    logs = []
+    if 'label' in payload.plan:
+        for cid in payload.plan['label']:
+            if not (1 <= cid <= len(cols)): continue
+            col = cols[cid-1]
+            le = LabelEncoder()
+            df[col] = le.fit_transform(df[col].astype(str))
+            logs.append(f"le=LabelEncoder(); df['{col}']=le.fit_transform(df['{col}'].astype(str))")
+    if 'one_hot' in payload.plan:
+        oh_cols = [cols[cid-1] for cid in payload.plan['one_hot'] if 1 <= cid <= len(cols)]
+        if oh_cols:
+            df = pd.get_dummies(df, columns=oh_cols, drop_first=True)
+            logs.append(f"df=pd.get_dummies(df, columns={oh_cols}, drop_first=True)")
+    _save_df(payload.session_id, df)
+    if logs:
+        _log(payload.session_id, "Categorical Encoding", logs)
+    return {"message": "ok", "columns": get_df_info(df).to_dict(orient="records")}
+
+@app.get("/suggestions/scaling/{session_id}")
+def api_scaling_suggestions(session_id: str):
+    df = _load_df(session_id)
+    nums = df.select_dtypes(include=['float64', 'int64', 'int32']).columns
+    suggestions = {}
+    for col in nums:
+        if df[col].nunique() <= 2: continue
+        skew = float(df[col].skew())
+        action = 'standard' if abs(skew) < 1 else 'minmax'
+        suggestions[df.columns.get_loc(col) + 1] = {"column": col, "skew": round(skew, 2), "suggested_action": action}
+    return suggestions
+
+@app.post("/clean/scaling")
+def api_scaling_apply(payload: ScalingPlan):
+    df = _load_df(payload.session_id)
+    cols = list(df.columns)
+    logs = []
+    if 'standard' in payload.plan:
+        std_cols = [cols[cid-1] for cid in payload.plan['standard'] if 1 <= cid <= len(cols)]
+        if std_cols:
+            scaler = StandardScaler()
+            df[std_cols] = scaler.fit_transform(df[std_cols])
+            logs.append(f"scaler=StandardScaler(); df[{std_cols}]=scaler.fit_transform(df[{std_cols}])")
+    if 'minmax' in payload.plan:
+        mm_cols = [cols[cid-1] for cid in payload.plan['minmax'] if 1 <= cid <= len(cols)]
+        if mm_cols:
+            scaler = MinMaxScaler()
+            df[mm_cols] = scaler.fit_transform(df[mm_cols])
+            logs.append(f"scaler=MinMaxScaler(); df[{mm_cols}]=scaler.fit_transform(df[{mm_cols}])")
+    _save_df(payload.session_id, df)
+    if logs:
+        _log(payload.session_id, "Feature Scaling", logs)
+    return {"message": "ok"}
+
+@app.get("/analysis/univariate/{session_id}")
+def api_univariate(session_id: str):
+    df = _load_df(session_id)
+    nums = df.select_dtypes(include=['float64', 'int64']).columns
+    stats_df = df[nums].describe().T
+    stats_df['skew'] = df[nums].skew().round(2)
+    stats_df['%_zeros'] = (df[nums] == 0).mean().round(4) * 100
+    _log(session_id, "Univariate Analysis", [
+        "numeric_cols = df.select_dtypes(include=np.number).columns",
+        "for col in numeric_cols:",
+        "    fig, ax = plt.subplots(1, 2, figsize=(14, 5))",
+        "    sns.histplot(df[col], kde=True, ax=ax[0])",
+        "    sns.boxplot(x=df[col], ax=ax[1])",
+        "    plt.show()"
+    ])
+    return stats_df.to_dict(orient="index")
+
+@app.get("/analysis/bivariate/{session_id}")
+def api_bivariate(session_id: str):
+    df = _load_df(session_id)
+    nums = df.select_dtypes(include=['float64', 'int64']).columns
+    corr = df[nums].corr()
+    _log(session_id, "Bivariate Analysis", [
+        "numeric_cols = df.select_dtypes(include=np.number).columns",
+        "sns.heatmap(df[numeric_cols].corr(), annot=True, cmap='coolwarm')",
+        "plt.show()",
+        "sns.pairplot(df[numeric_cols])",
+        "plt.show()"
+    ])
+    return corr.to_dict()
+
+@app.get("/plots/univariate/{session_id}/{column_name}")
+def api_plot_univariate(session_id: str, column_name: str):
+    """Generate histogram + boxplot PNG for a specific column"""
+    df = _load_df(session_id)
+    if column_name not in df.columns:
+        raise HTTPException(status_code=404, detail=f"Column '{column_name}' not found")
+    
+    if not pd.api.types.is_numeric_dtype(df[column_name]):
+        raise HTTPException(status_code=400, detail=f"Column '{column_name}' is not numeric")
+    
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    
+    # Histogram with KDE
+    sns.histplot(df[column_name], kde=True, ax=axes[0], color='skyblue')
+    axes[0].set_title(f'Distribution of {column_name}')
+    axes[0].set_xlabel(column_name)
+    axes[0].grid(alpha=0.3)
+    
+    # Boxplot
+    sns.boxplot(x=df[column_name], ax=axes[1], color='lightcoral')
+    axes[1].set_title(f'Boxplot of {column_name}')
+    axes[1].grid(alpha=0.3)
+    
+    plt.tight_layout()
+    
+    # Save to bytes buffer
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+    buf.seek(0)
+    plt.close(fig)
+    
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+@app.get("/plots/univariate/{session_id}")
+def api_plot_all_univariate(session_id: str):
+    """Generate combined univariate plots for all numeric columns and save to plots/"""
+    df = _load_df(session_id)
+    nums = df.select_dtypes(include=['float64', 'int64']).columns
+    
+    if len(nums) == 0:
+        raise HTTPException(status_code=400, detail="No numeric columns found")
+    
+    saved_files = []
+    for col in nums:
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+        
+        sns.histplot(df[col], kde=True, ax=axes[0], color='skyblue')
+        axes[0].set_title(f'Distribution of {col}')
+        axes[0].grid(alpha=0.3)
+        
+        sns.boxplot(x=df[col], ax=axes[1], color='lightcoral')
+        axes[1].set_title(f'Boxplot of {col}')
+        axes[1].grid(alpha=0.3)
+        
+        plt.tight_layout()
+        
+        filename = f"{col.replace(' ', '_')}_univariate.png"
+        filepath = os.path.join(PLOTS_DIR, filename)
+        plt.savefig(filepath, dpi=300, bbox_inches='tight')
+        plt.close(fig)
+        saved_files.append(filename)
+    
+    return {"message": f"Generated {len(saved_files)} plots", "files": saved_files, "location": os.path.abspath(PLOTS_DIR)}
+
+@app.get("/plots/bivariate/heatmap/{session_id}")
+def api_plot_heatmap(session_id: str, method: str = "pearson"):
+    """Generate correlation heatmap PNG"""
+    df = _load_df(session_id)
+    nums = df.select_dtypes(include=['float64', 'int64']).columns
+    
+    if len(nums) < 2:
+        raise HTTPException(status_code=400, detail="Need at least 2 numeric columns for correlation")
+    
+    fig, ax = plt.subplots(figsize=(12, 10))
+    corr = df[nums].corr(method=method)
+    
+    sns.heatmap(corr, annot=True, cmap='coolwarm', fmt='.2f', vmin=-1, vmax=1,
+                linewidths=0.5, linecolor='white', ax=ax, square=True)
+    ax.set_title(f'Correlation Heatmap ({method.capitalize()})', fontsize=16, pad=20)
+    
+    plt.tight_layout()
+    
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+    buf.seek(0)
+    plt.close(fig)
+    
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+@app.get("/plots/bivariate/pairplot/{session_id}")
+def api_plot_pairplot(session_id: str, max_cols: int = 10):
+    """Generate pairplot and return PNG image (also saves to plots/)."""
+    df = _load_df(session_id)
+    nums = df.select_dtypes(include=['float64', 'int64']).columns
+
+    if len(nums) < 2:
+        raise HTTPException(status_code=400, detail="Need at least 2 numeric columns")
+
+    # Limit columns to avoid memory issues
+    warning_msg = None
+    if len(nums) > max_cols:
+        nums = nums[:max_cols]
+        warning_msg = f"Limited to first {max_cols} numeric columns"
+
+    pairplot_fig = sns.pairplot(df[nums], diag_kind='kde', plot_kws={'alpha': 0.6})
+    pairplot_fig.fig.suptitle('Pairplot of Numeric Features', y=1.02, fontsize=16)
+
+    filename = "pairplot.png"
+    filepath = os.path.join(PLOTS_DIR, filename)
+    pairplot_fig.savefig(filepath, dpi=150, bbox_inches='tight')
+
+    buf = io.BytesIO()
+    pairplot_fig.fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+    buf.seek(0)
+    plt.close(pairplot_fig.fig)
+
+    # Return image bytes for easy inline rendering on frontend
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+@app.post("/download/notebook")
+def api_download_notebook(session_id: str = Body(..., embed=True), filename: str = Body("workflow", embed=True)):
+    logs = _SESSION_LOGS.get(session_id, [])
+    if not logs:
+        raise HTTPException(status_code=404, detail="No logs found for session")
+    save_to_ipynb(logs, filename=f"{filename}.ipynb")
+    return FileResponse(os.path.abspath(filename + ".ipynb"), filename=filename + ".ipynb")
+
+@app.get("/download/csv/{session_id}")
+def api_download_csv(session_id: str):
+    path = _session_path(session_id)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Session not found")
+    return FileResponse(os.path.abspath(path), filename="clean_data.csv")
+
 if __name__ == "__main__":
     # Initialize Log List
     notebook_log = []
