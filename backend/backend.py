@@ -15,30 +15,19 @@ import matplotlib
 matplotlib.use('Agg')
 from fastapi import FastAPI, File, UploadFile, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 import uuid
 import io
 import zipfile
-from pymongo import MongoClient
+import shutil
 
 import httpx
 from fastapi import FastAPI
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from contextlib import asynccontextmanager
-import certifi
 
 HEALTH_ENDPOINT_URL = "https://automl-1smu.onrender.com/health"
-
-# MongoDB setup
-MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "automl")
-
-# Create a new client and connect to the server
-_mongo_client = MongoClient(MONGODB_URI, tlsCAFile=certifi.where())
-_mongo_db = _mongo_client[MONGO_DB_NAME]
-_sessions_col = _mongo_db["sessions"]
-_logs_col = _mongo_db["session_logs"]
 
 # 1. Define the specific job function
 async def check_health_job():
@@ -1582,35 +1571,31 @@ def handle_feature_scaling(df, df_info, log_list=None):
 # ==========================================
 """
 FastAPI Backend Endpoints
-- MongoDB-backed session storage.
+- Lightweight CSV-based session storage to avoid extra dependencies.
+- Mirrors the interactive logic with plan-based endpoints.
 """
 
-def _load_df(session_id: str) -> pd.DataFrame:
-    doc = _sessions_col.find_one({"_id": session_id}, {"data": 1})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Session not found")
-    return pd.DataFrame(doc.get("data", []))
+STORAGE_DIR = "temp_storage"
+PLOTS_DIR = "plots"
+os.makedirs(STORAGE_DIR, exist_ok=True)
+os.makedirs(PLOTS_DIR, exist_ok=True)
 
+_SESSION_LOGS: dict = {}
+
+def _session_path(session_id: str) -> str:
+    return os.path.join(STORAGE_DIR, f"{session_id}.csv")
+
+def _load_df(session_id: str) -> pd.DataFrame:
+    path = _session_path(session_id)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Session not found")
+    return pd.read_csv(path)
 
 def _save_df(session_id: str, df: pd.DataFrame) -> None:
-    _sessions_col.update_one(
-        {"_id": session_id},
-        {"$set": {"data": df.to_dict(orient="records")}},
-        upsert=True,
-    )
-
+    df.to_csv(_session_path(session_id), index=False)
 
 def _log(session_id: str, step: str, code_lines: list[str]) -> None:
-    _logs_col.update_one(
-        {"_id": session_id},
-        {"$push": {"logs": {"step": step, "code_lines": code_lines}}},
-        upsert=True,
-    )
-
-
-def _get_logs(session_id: str) -> list[dict]:
-    doc = _logs_col.find_one({"_id": session_id}, {"logs": 1})
-    return doc.get("logs", []) if doc else []
+    _SESSION_LOGS.setdefault(session_id, []).append((step, code_lines))
 
 class DropColumnsModel(BaseModel):
     session_id: str
@@ -1645,13 +1630,10 @@ def health():
 @app.post("/upload")
 async def upload(file: UploadFile = File(...)):
     session_id = str(uuid.uuid4())
-    try:
-        file.file.seek(0)
-        df = pd.read_csv(file.file)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to read CSV: {e}")
-
-    _save_df(session_id, df)
+    temp_csv = _session_path(session_id)
+    with open(temp_csv, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    df = pd.read_csv(temp_csv)
     _log(session_id, "Load Data", [
         f"file_path = '{file.filename}'",
         "df = pd.read_csv(file_path)",
@@ -2030,29 +2012,18 @@ def api_plot_pairplot(session_id: str, max_cols: int = 10):
 
 @app.post("/download/notebook")
 def api_download_notebook(session_id: str = Body(..., embed=True), filename: str = Body("workflow", embed=True)):
-    logs = _get_logs(session_id)
+    logs = _SESSION_LOGS.get(session_id, [])
     if not logs:
         raise HTTPException(status_code=404, detail="No logs found for session")
-
-    formatted_logs = [(entry.get("step"), entry.get("code_lines", [])) for entry in logs]
-    nb_bytes = notebook_bytes(formatted_logs)
-    download_name = filename if filename.endswith(".ipynb") else f"{filename}.ipynb"
-
-    return StreamingResponse(
-        io.BytesIO(nb_bytes),
-        media_type="application/x-ipynb+json",
-        headers={"Content-Disposition": f"attachment; filename={download_name}"},
-    )
+    save_to_ipynb(logs, filename=f"{filename}.ipynb")
+    return FileResponse(os.path.abspath(filename + ".ipynb"), filename=filename + ".ipynb")
 
 @app.get("/download/csv/{session_id}")
 def api_download_csv(session_id: str):
-    df = _load_df(session_id)
-    csv_bytes = df.to_csv(index=False).encode("utf-8")
-    return StreamingResponse(
-        io.BytesIO(csv_bytes),
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=clean_data.csv"},
-    )
+    path = _session_path(session_id)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Session not found")
+    return FileResponse(os.path.abspath(path), filename="clean_data.csv")
 
 @app.get("/health")
 async def health_check():
