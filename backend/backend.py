@@ -1524,23 +1524,6 @@ FastAPI Backend Endpoints
 - Mirrors the interactive logic with plan-based endpoints.
 """
 
-app = FastAPI(title="AutoEDA API (single-file)")
-
-# CORS to allow frontend (Vite) during development
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost",
-        "http://127.0.0.1",
-        "https://auto-ml-mu.vercel.app",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 STORAGE_DIR = "temp_storage"
 PLOTS_DIR = "plots"
 os.makedirs(STORAGE_DIR, exist_ok=True)
@@ -2022,7 +2005,22 @@ async def lifespan(app: FastAPI):
     # SHUTDOWN
     scheduler.shutdown()
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(title="AutoEDA API (single-file)", lifespan=lifespan)
+
+# CORS to allow frontend (Vite) during development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost",
+        "http://127.0.0.1",
+        "https://auto-ml-mu.vercel.app",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 if __name__ == "__main__":
     # Initialize Log List
