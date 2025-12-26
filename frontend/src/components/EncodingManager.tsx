@@ -64,7 +64,7 @@ export default function EncodingManager({ sessionId, onComplete }: EncodingManag
   const handleApply = async () => {
     setProcessing(true);
     try {
-      await fetch('http://localhost:8000/clean/encoding', {
+      await fetch('https://automl-1smu.onrender.com/clean/encoding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

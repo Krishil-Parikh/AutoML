@@ -64,7 +64,7 @@ export default function OutliersManager({ sessionId, onComplete }: OutliersManag
   const handleApply = async () => {
     setProcessing(true);
     try {
-      await fetch('http://localhost:8000/clean/outliers', {
+      await fetch('https://automl-1smu.onrender.com/clean/outliers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

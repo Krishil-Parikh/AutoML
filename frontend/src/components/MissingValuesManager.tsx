@@ -25,7 +25,7 @@ export default function MissingValuesManager({ sessionId, onComplete }: MissingV
 
   const fetchSuggestions = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/suggestions/missing/${sessionId}`);
+      const response = await fetch(`https://automl-1smu.onrender.com/suggestions/missing/${sessionId}`);
       const data = await response.json();
       setSuggestions(data);
 
@@ -64,7 +64,7 @@ export default function MissingValuesManager({ sessionId, onComplete }: MissingV
   const handleApply = async () => {
     setProcessing(true);
     try {
-      await fetch('http://localhost:8000/clean/missing', {
+      await fetch('https://automl-1smu.onrender.com/clean/missing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

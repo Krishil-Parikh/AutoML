@@ -64,7 +64,7 @@ export default function ScalingManager({ sessionId, onComplete }: ScalingManager
   const handleApply = async () => {
     setProcessing(true);
     try {
-      await fetch('http://localhost:8000/clean/scaling', {
+      await fetch('https://automl-1smu.onrender.com/clean/scaling', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
