@@ -57,7 +57,7 @@ export default function ColumnManager({ sessionId, onComplete, onDataShapeChange
 
     setProcessing(true);
     try {
-      const response = await fetch('http://localhost:8000/clean/drop', {
+      const response = await fetch('https://automl-1smu.onrender.com/clean/drop', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
