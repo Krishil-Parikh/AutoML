@@ -6,7 +6,7 @@ interface DownloadSectionProps {
 
 export default function DownloadSection({ sessionId }: DownloadSectionProps) {
   const downloadCSV = () => {
-    window.open(`http://localhost:8000/download/csv/${sessionId}`, '_blank');
+    window.open(`https://automl-1smu.onrender.com/download/csv/${sessionId}`, '_blank');
   };
 
   const downloadNotebook = async () => {
