@@ -1986,6 +1986,10 @@ def api_download_csv(session_id: str):
         raise HTTPException(status_code=404, detail="Session not found")
     return FileResponse(os.path.abspath(path), filename="clean_data.csv")
 
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "uptime": "ok"}
+
 if __name__ == "__main__":
     # Initialize Log List
     notebook_log = []
