@@ -11,7 +11,7 @@ import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 # FastAPI additions
-import matplotlib
+import matplotlib.pyplot as plt
 matplotlib.use('Agg')
 from fastapi import FastAPI, File, UploadFile, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
