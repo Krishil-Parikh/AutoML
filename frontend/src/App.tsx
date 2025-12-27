@@ -55,46 +55,46 @@ function App() {
 
       <div className="relative">
         <header className="backdrop-blur-md bg-white/70 border-b border-slate-200 sticky top-0 z-50 shadow-sm">
-          <div className="max-w-7xl mx-auto px-6 py-6">
-            <div className="flex items-center space-x-3">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
+            <div className="flex items-center space-x-2 sm:space-x-3">
               <div 
-                className="bg-gradient-to-br from-blue-500 to-cyan-500 p-3 rounded-xl shadow-lg cursor-pointer hover:scale-105 transition-transform duration-300"
+                className="bg-gradient-to-br from-blue-500 to-cyan-500 p-2 sm:p-3 rounded-xl shadow-lg cursor-pointer hover:scale-105 transition-transform duration-300"
                 onClick={() => setHasStarted(false)} // Option to go back to home
               >
-                <Database className="w-7 h-7 text-white" />
+                <Database className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
               </div>
               <div>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
                   AutoEDA Studio
                 </h1>
-                <p className="text-sm text-slate-500">Intelligent Data Preprocessing & Analysis</p>
+                <p className="text-xs sm:text-sm text-slate-500 hidden sm:block">Intelligent Data Preprocessing & Analysis</p>
               </div>
             </div>
           </div>
         </header>
 
-        <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
           <StepIndicator steps={steps} currentStep={currentStep} onStepClick={setCurrentStep} sessionId={sessionId} />
 
           {dataShape && (
-            <div className="mb-6 bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-sm border border-slate-200 animate-slide-down">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
+            <div className="mb-4 sm:mb-6 bg-white/80 backdrop-blur-sm rounded-2xl p-3 sm:p-4 shadow-sm border border-slate-200 animate-slide-down">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 w-full sm:w-auto">
                   <div className="flex items-center space-x-2 text-slate-600">
                     <Database className="w-4 h-4" />
-                    <span className="text-sm font-medium">Dataset Shape:</span>
+                    <span className="text-xs sm:text-sm font-medium">Dataset Shape:</span>
                   </div>
-                  <div className="flex space-x-4">
-                    <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm font-semibold">
+                  <div className="flex space-x-2 sm:space-x-4">
+                    <span className="px-2 sm:px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs sm:text-sm font-semibold">
                       {dataShape[0]} rows
                     </span>
-                    <span className="px-3 py-1 bg-cyan-100 text-cyan-700 rounded-lg text-sm font-semibold">
+                    <span className="px-2 sm:px-3 py-1 bg-cyan-100 text-cyan-700 rounded-lg text-xs sm:text-sm font-semibold">
                       {dataShape[1]} columns
                     </span>
                   </div>
                 </div>
-                <span className="px-3 py-1 bg-green-100 text-green-700 rounded-lg text-sm font-medium flex items-center space-x-1">
-                  <CheckCircle className="w-4 h-4" />
+                <span className="px-2 sm:px-3 py-1 bg-green-100 text-green-700 rounded-lg text-xs sm:text-sm font-medium flex items-center space-x-1">
+                  <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4" />
                   <span>Session Active</span>
                 </span>
               </div>

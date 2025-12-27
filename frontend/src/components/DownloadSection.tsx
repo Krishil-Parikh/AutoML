@@ -38,20 +38,20 @@ export default function DownloadSection({ sessionId }: DownloadSectionProps) {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-8 border border-slate-200 animate-scale-in">
-        <div className="text-center mb-8">
-          <div className="inline-flex p-4 bg-gradient-to-br from-green-500 to-emerald-500 rounded-2xl shadow-lg mb-4">
-            <CheckCircle className="w-12 h-12 text-white" />
+    <div className="max-w-4xl mx-auto px-4 sm:px-0">
+      <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-4 sm:p-8 border border-slate-200 animate-scale-in">
+        <div className="text-center mb-6 sm:mb-8">
+          <div className="inline-flex p-3 sm:p-4 bg-gradient-to-br from-green-500 to-emerald-500 rounded-2xl shadow-lg mb-3 sm:mb-4">
+            <CheckCircle className="w-8 h-8 sm:w-12 sm:h-12 text-white" />
           </div>
-          <h2 className="text-3xl font-bold text-slate-800 mb-2">Preprocessing Complete!</h2>
-          <p className="text-slate-500">Your data has been cleaned and is ready for analysis</p>
+          <h2 className="text-2xl sm:text-3xl font-bold text-slate-800 mb-2">Preprocessing Complete!</h2>
+          <p className="text-sm sm:text-base text-slate-500">Your data has been cleaned and is ready for analysis</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
           <button
             onClick={downloadCSV}
-            className="group bg-gradient-to-br from-blue-50 to-cyan-50 hover:from-blue-100 hover:to-cyan-100 border-2 border-blue-200 rounded-2xl p-6 transition-all duration-300 hover:scale-105 hover:shadow-xl"
+            className="group bg-gradient-to-br from-blue-50 to-cyan-50 hover:from-blue-100 hover:to-cyan-100 border-2 border-blue-200 rounded-2xl p-4 sm:p-6 transition-all duration-300 hover:scale-105 hover:shadow-xl">
           >
             <div className="flex flex-col items-center space-y-4">
               <div className="p-4 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl group-hover:scale-110 transition-transform duration-300">

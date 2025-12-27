@@ -90,42 +90,42 @@ export default function ColumnManager({ sessionId, onComplete, onDataShapeChange
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-8 border border-slate-200 animate-scale-in">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center space-x-3">
-            <div className="p-3 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl">
-              <Database className="w-6 h-6 text-white" />
+    <div className="max-w-6xl mx-auto px-4 sm:px-0">
+      <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-4 sm:p-8 border border-slate-200 animate-scale-in">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-3 sm:gap-0">
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            <div className="p-2 sm:p-3 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl">
+              <Database className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-slate-800">Column Management</h2>
-              <p className="text-sm text-slate-500">Select columns to drop from your dataset</p>
+              <h2 className="text-xl sm:text-2xl font-bold text-slate-800">Column Management</h2>
+              <p className="text-xs sm:text-sm text-slate-500">Select columns to drop from your dataset</p>
             </div>
           </div>
           {selectedIds.size > 0 && (
-            <span className="px-4 py-2 bg-red-100 text-red-700 rounded-xl font-semibold animate-bounce-subtle">
+            <span className="px-3 sm:px-4 py-1.5 sm:py-2 bg-red-100 text-red-700 rounded-xl text-sm sm:text-base font-semibold animate-bounce-subtle">
               {selectedIds.size} selected
             </span>
           )}
         </div>
 
-        <div className="bg-slate-50 rounded-xl p-4 mb-6 border border-slate-200">
+        <div className="bg-slate-50 rounded-xl p-3 sm:p-4 mb-4 sm:mb-6 border border-slate-200">
           <div className="flex items-start space-x-2">
-            <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-slate-600">
+            <Info className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+            <p className="text-xs sm:text-sm text-slate-600">
               Click on rows to select columns you want to remove. Columns with high missing values or low uniqueness might be candidates for removal.
             </p>
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
-          <table className="w-full">
+        <div className="overflow-x-auto rounded-xl border border-slate-200 -mx-4 sm:mx-0">
+          <table className="w-full min-w-[600px]">
             <thead>
               <tr className="bg-gradient-to-r from-slate-100 to-slate-50">
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Column</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Type</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Unique %</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Missing %</th>
+                <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-[10px] sm:text-xs font-semibold text-slate-600 uppercase tracking-wider">Column</th>
+                <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-[10px] sm:text-xs font-semibold text-slate-600 uppercase tracking-wider">Type</th>
+                <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-[10px] sm:text-xs font-semibold text-slate-600 uppercase tracking-wider">Unique %</th>
+                <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-[10px] sm:text-xs font-semibold text-slate-600 uppercase tracking-wider">Missing %</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -141,29 +141,29 @@ export default function ColumnManager({ sessionId, onComplete, onDataShapeChange
                       : 'bg-slate-50/50 hover:bg-blue-50'
                   }`}
                 >
-                  <td className="px-6 py-4">
+                  <td className="px-3 sm:px-6 py-3 sm:py-4">
                     <div className="flex items-center space-x-2">
                       <div
-                        className={`w-5 h-5 rounded border-2 transition-all duration-300 flex items-center justify-center ${
+                        className={`w-4 h-4 sm:w-5 sm:h-5 rounded border-2 transition-all duration-300 flex items-center justify-center ${
                           selectedIds.has(col.id)
                             ? 'bg-red-500 border-red-500'
                             : 'border-slate-300'
                         }`}
                       >
-                        {selectedIds.has(col.id) && <Trash2 className="w-3 h-3 text-white" />}
+                        {selectedIds.has(col.id) && <Trash2 className="w-2 h-2 sm:w-3 sm:h-3 text-white" />}
                       </div>
-                      <span className="font-medium text-slate-800">{col.column_name}</span>
+                      <span className="font-medium text-slate-800 text-xs sm:text-sm">{col.column_name}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-600">
-                    <span className="px-2 py-1 bg-slate-200 rounded-md font-mono text-xs">{col.dtype}</span>
+                  <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-slate-600">
+                    <span className="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-slate-200 rounded-md font-mono text-[10px] sm:text-xs">{col.dtype}</span>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-600">
+                  <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-slate-600">
                     <span className={`font-semibold ${col.percentage_unique < 1 ? 'text-orange-600' : 'text-slate-700'}`}>
                       {col.percentage_unique.toFixed(2)}%
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-600">
+                  <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-slate-600">
                     <span className={`font-semibold ${col.percentage_missing > 50 ? 'text-red-600' : col.percentage_missing > 0 ? 'text-orange-600' : 'text-green-600'}`}>
                       {col.percentage_missing.toFixed(2)}%
                     </span>
@@ -174,28 +174,28 @@ export default function ColumnManager({ sessionId, onComplete, onDataShapeChange
           </table>
         </div>
 
-        <div className="mt-6 flex space-x-4">
+        <div className="mt-4 sm:mt-6 flex flex-col sm:flex-row gap-3 sm:gap-4">
           <button
             onClick={handleSkip}
             disabled={processing}
-            className="flex-1 bg-slate-200 text-slate-700 py-4 px-6 rounded-xl font-semibold hover:bg-slate-300 transition-all duration-300 disabled:opacity-50"
+            className="flex-1 bg-slate-200 text-slate-700 py-3 sm:py-4 px-4 sm:px-6 rounded-xl text-sm sm:text-base font-semibold hover:bg-slate-300 transition-all duration-300 disabled:opacity-50"
           >
             Skip
           </button>
           <button
             onClick={handleDrop}
             disabled={processing}
-            className="flex-1 bg-gradient-to-r from-blue-500 to-cyan-500 text-white py-4 px-6 rounded-xl font-semibold shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center space-x-2"
+            className="flex-1 bg-gradient-to-r from-blue-500 to-cyan-500 text-white py-3 sm:py-4 px-4 sm:px-6 rounded-xl text-sm sm:text-base font-semibold shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center space-x-2"
           >
             {processing ? (
               <>
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
                 <span>Processing...</span>
               </>
             ) : (
               <>
                 <span>{selectedIds.size > 0 ? `Drop & Continue` : 'Continue'}</span>
-                <ChevronRight className="w-5 h-5" />
+                <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
               </>
             )}
           </button>

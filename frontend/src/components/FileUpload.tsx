@@ -66,14 +66,14 @@ export default function FileUpload({ onComplete }: FileUploadProps) {
   };
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-8 border border-slate-200 animate-scale-in">
-        <div className="text-center mb-8">
-          <div className="inline-flex p-4 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl shadow-lg mb-4">
-            <Upload className="w-12 h-12 text-white" />
+    <div className="max-w-2xl mx-auto px-4 sm:px-0">
+      <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-4 sm:p-8 border border-slate-200 animate-scale-in">
+        <div className="text-center mb-6 sm:mb-8">
+          <div className="inline-flex p-3 sm:p-4 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl shadow-lg mb-3 sm:mb-4">
+            <Upload className="w-8 h-8 sm:w-12 sm:h-12 text-white" />
           </div>
-          <h2 className="text-3xl font-bold text-slate-800 mb-2">Upload Your Dataset</h2>
-          <p className="text-slate-500">Start your data preprocessing journey</p>
+          <h2 className="text-2xl sm:text-3xl font-bold text-slate-800 mb-2">Upload Your Dataset</h2>
+          <p className="text-sm sm:text-base text-slate-500">Start your data preprocessing journey</p>
         </div>
 
         <div
@@ -81,7 +81,7 @@ export default function FileUpload({ onComplete }: FileUploadProps) {
           onDragLeave={handleDrag}
           onDragOver={handleDrag}
           onDrop={handleDrop}
-          className={`relative border-2 border-dashed rounded-2xl p-12 transition-all duration-300 ${
+          className={`relative border-2 border-dashed rounded-2xl p-6 sm:p-12 transition-all duration-300 ${
             dragActive
               ? 'border-blue-500 bg-blue-50 scale-105'
               : 'border-slate-300 bg-slate-50 hover:border-blue-400 hover:bg-blue-50/50'
@@ -95,11 +95,11 @@ export default function FileUpload({ onComplete }: FileUploadProps) {
           />
 
           <div className="text-center">
-            <FileText className="w-16 h-16 text-slate-400 mx-auto mb-4" />
-            <p className="text-lg font-medium text-slate-700 mb-2">
+            <FileText className="w-12 h-12 sm:w-16 sm:h-16 text-slate-400 mx-auto mb-3 sm:mb-4" />
+            <p className="text-base sm:text-lg font-medium text-slate-700 mb-2">
               {file ? file.name : 'Drop your CSV file here'}
             </p>
-            <p className="text-sm text-slate-500">or click to browse</p>
+            <p className="text-xs sm:text-sm text-slate-500 mb-3 sm:mb-4">or click to browse</p>
           </div>
         </div>
 
@@ -114,17 +114,17 @@ export default function FileUpload({ onComplete }: FileUploadProps) {
           <button
             onClick={handleUpload}
             disabled={uploading}
-            className="w-full mt-6 bg-gradient-to-r from-blue-500 to-cyan-500 text-white py-4 px-6 rounded-xl font-semibold shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center space-x-2"
+            className="w-full mt-4 sm:mt-6 bg-gradient-to-r from-blue-500 to-cyan-500 text-white py-3 sm:py-4 px-4 sm:px-6 rounded-xl font-semibold shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center space-x-2"
           >
             {uploading ? (
               <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Uploading...</span>
+                <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+                <span className="text-sm sm:text-base">Uploading...</span>
               </>
             ) : (
               <>
-                <CheckCircle className="w-5 h-5" />
-                <span>Upload & Start</span>
+                <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="text-sm sm:text-base">Upload & Start</span>
               </>
             )}
           </button>

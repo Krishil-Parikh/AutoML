@@ -37,22 +37,22 @@ export default function CorrelationManager({ sessionId, onComplete }: Correlatio
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-8 border border-slate-200 animate-scale-in">
-        <div className="text-center mb-8">
-          <div className="inline-flex p-4 bg-gradient-to-br from-violet-500 to-pink-500 rounded-2xl shadow-lg mb-4">
-            <Layers className="w-12 h-12 text-white" />
+    <div className="max-w-4xl mx-auto px-4 sm:px-0">
+      <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-4 sm:p-8 border border-slate-200 animate-scale-in">
+        <div className="text-center mb-6 sm:mb-8">
+          <div className="inline-flex p-3 sm:p-4 bg-gradient-to-br from-violet-500 to-pink-500 rounded-2xl shadow-lg mb-3 sm:mb-4">
+            <Layers className="w-8 h-8 sm:w-12 sm:h-12 text-white" />
           </div>
-          <h2 className="text-3xl font-bold text-slate-800 mb-2">Multicollinearity Check</h2>
-          <p className="text-slate-500">Detect and handle highly correlated features</p>
+          <h2 className="text-2xl sm:text-3xl font-bold text-slate-800 mb-2">Multicollinearity Check</h2>
+          <p className="text-sm sm:text-base text-slate-500">Detect and handle highly correlated features</p>
         </div>
 
-        <div className="bg-violet-50 rounded-xl p-6 mb-6 border border-violet-200">
-          <div className="flex items-start space-x-3">
-            <AlertTriangle className="w-6 h-6 text-violet-600 flex-shrink-0 mt-0.5" />
+        <div className="bg-violet-50 rounded-xl p-4 sm:p-6 mb-4 sm:mb-6 border border-violet-200">
+          <div className="flex items-start space-x-2 sm:space-x-3">
+            <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-violet-600 flex-shrink-0 mt-0.5" />
             <div className="w-full">
-              <p className="text-sm text-violet-800 font-medium mb-2">About Correlation</p>
-              <p className="text-sm text-violet-600 mb-4">
+              <p className="text-xs sm:text-sm text-violet-800 font-medium mb-2">About Correlation</p>
+              <p className="text-xs sm:text-sm text-violet-600 mb-3 sm:mb-4">
                 Features with correlation higher than the threshold are redundant and can cause model instability. The system will automatically identify and remove these features .
               </p>
               
@@ -91,11 +91,11 @@ export default function CorrelationManager({ sessionId, onComplete }: Correlatio
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-3 sm:space-y-4">
           <button
             onClick={handleAutoDrop}
             disabled={processing}
-            className="w-full bg-gradient-to-r from-violet-500 to-pink-500 text-white py-4 px-6 rounded-xl font-semibold shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center space-x-2"
+            className="w-full bg-gradient-to-r from-violet-500 to-pink-500 text-white py-3 sm:py-4 px-4 sm:px-6 rounded-xl text-sm sm:text-base font-semibold shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center space-x-2"
           >
             {processing ? (
               <>

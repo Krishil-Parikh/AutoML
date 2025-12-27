@@ -134,29 +134,29 @@ export default function Analysis({ sessionId, onComplete }: AnalysisProps) {
   };
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-8 border border-slate-200 animate-scale-in">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center space-x-3">
-            <div className="p-3 bg-gradient-to-br from-rose-500 to-pink-500 rounded-xl">
-              <BarChart3 className="w-6 h-6 text-white" />
+    <div className="max-w-6xl mx-auto px-4 sm:px-0">
+      <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-4 sm:p-8 border border-slate-200 animate-scale-in">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-3 sm:gap-0">
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            <div className="p-2 sm:p-3 bg-gradient-to-br from-rose-500 to-pink-500 rounded-xl">
+              <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-slate-800">Data Analysis</h2>
-              <p className="text-sm text-slate-500">Visualize your cleaned dataset</p>
+              <h2 className="text-xl sm:text-2xl font-bold text-slate-800">Data Analysis</h2>
+              <p className="text-xs sm:text-sm text-slate-500">Visualize your cleaned dataset</p>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 mb-6">
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 mb-4 sm:mb-6">
           {/* Correlation Heatmap Section */}
-          <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-800">Correlation Heatmap</h3>
+          <div className="bg-slate-50 rounded-xl p-4 sm:p-6 border border-slate-200">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3 sm:gap-0">
+              <h3 className="text-base sm:text-lg font-semibold text-slate-800">Correlation Heatmap</h3>
               <button
                 onClick={generateHeatmap}
                 disabled={loading}
-                className="px-4 py-2 bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
+                className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center justify-center space-x-2 text-sm sm:text-base"
               >
                 {loading && !heatmapUrl ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
                 <span>Generate</span>
@@ -176,14 +176,14 @@ export default function Analysis({ sessionId, onComplete }: AnalysisProps) {
           </div>
 
           {/* Univariate Analysis Section */}
-          <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-800">Univariate Analysis</h3>
-              <div className="flex space-x-2">
+          <div className="bg-slate-50 rounded-xl p-4 sm:p-6 border border-slate-200">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3 sm:gap-0">
+              <h3 className="text-base sm:text-lg font-semibold text-slate-800">Univariate Analysis</h3>
+              <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 w-full sm:w-auto">
                  <button
                   onClick={toggleSelectAll}
                   disabled={loading}
-                  className="px-3 py-1.5 text-sm text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 disabled:opacity-50"
+                  className="w-full sm:w-auto px-3 py-1.5 text-xs sm:text-sm text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   <CheckSquare className="w-4 h-4" />
                   {selectedColumns.length === numericColumns.length ? 'Deselect All' : 'Select All'}
@@ -191,7 +191,7 @@ export default function Analysis({ sessionId, onComplete }: AnalysisProps) {
                 <button
                   onClick={generateUnivariateBatch}
                   disabled={loading || selectedColumns.length === 0}
-                  className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-blue-500 text-white rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
+                  className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-indigo-500 to-blue-500 text-white rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center justify-center space-x-2 text-sm sm:text-base"
                 >
                   {loading && currentProcessingCol ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
                   <span>Generate Selected ({selectedColumns.length})</span>
@@ -200,9 +200,9 @@ export default function Analysis({ sessionId, onComplete }: AnalysisProps) {
             </div>
 
             {/* Column Selection Grid */}
-            <div className="mb-6">
-                <p className="text-sm text-slate-500 mb-3">Select columns to analyze:</p>
-                <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
+            <div className="mb-4 sm:mb-6">
+                <p className="text-xs sm:text-sm text-slate-500 mb-3">Select columns to analyze:</p>
+                <div className="flex flex-wrap gap-2 max-h-32 sm:max-h-40 overflow-y-auto">
                     {numericColumns.map((col) => {
                         const isSelected = selectedColumns.includes(col);
                         return (
@@ -229,11 +229,11 @@ export default function Analysis({ sessionId, onComplete }: AnalysisProps) {
 
             {/* Charts Grid */}
             {(Object.keys(univariatePlots).length > 0 || currentProcessingCol) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 animate-fade-in">
                     {Object.entries(univariatePlots).map(([col, url]) => (
                         <div key={col} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-                            <div className="p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                                <span className="font-medium text-slate-700 text-sm truncate max-w-[200px]" title={col}>{col}</span>
+                            <div className="p-2 sm:p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                                <span className="font-medium text-slate-700 text-xs sm:text-sm truncate max-w-[150px] sm:max-w-[200px]" title={col}>{col}</span>
                                 <button
                                     onClick={() => downloadImage(url, `${col}_univariate.png`)}
                                     className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
@@ -262,13 +262,13 @@ export default function Analysis({ sessionId, onComplete }: AnalysisProps) {
           </div>
 
           {/* Pairplot Section */}
-          <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-800">Pairplot</h3>
+          <div className="bg-slate-50 rounded-xl p-4 sm:p-6 border border-slate-200">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3 sm:gap-0">
+              <h3 className="text-base sm:text-lg font-semibold text-slate-800">Pairplot</h3>
               <button
                 onClick={generatePairplot}
                 disabled={loading}
-                className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center space-x-2"
+                className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center justify-center space-x-2 text-sm sm:text-base"
               >
                 {loading && !pairplotUrl ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
                 <span>Generate</span>
