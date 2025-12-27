@@ -52,7 +52,7 @@ export default function DownloadSection({ sessionId }: DownloadSectionProps) {
           <button
             onClick={downloadCSV}
             className="group bg-gradient-to-br from-blue-50 to-cyan-50 hover:from-blue-100 hover:to-cyan-100 border-2 border-blue-200 rounded-2xl p-4 sm:p-6 transition-all duration-300 hover:scale-105 hover:shadow-xl">
-          >
+          
             <div className="flex flex-col items-center space-y-4">
               <div className="p-4 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl group-hover:scale-110 transition-transform duration-300">
                 <FileText className="w-8 h-8 text-white" />
