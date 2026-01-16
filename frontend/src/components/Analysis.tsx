@@ -8,7 +8,7 @@ import {
   Circle, 
   Download,
   CheckSquare,
-  XCircle
+  Settings2
 } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 
@@ -16,6 +16,18 @@ interface AnalysisProps {
   sessionId: string;
   onComplete: () => void;
 }
+
+// Plot type definitions
+type UnivariatePlotType = 1 | 2 | 3 | 4 | 5;
+type CorrelationMethod = 'pearson' | 'spearman';
+
+const UNIVARIATE_PLOT_OPTIONS = [
+  { id: 1, name: 'Histogram + Boxplot', description: 'Basic plots' },
+  { id: 2, name: 'Histogram with KDE', description: 'With stats overlay' },
+  { id: 3, name: 'Boxplot + Swarmplot', description: 'Distribution with points' },
+  { id: 4, name: 'Violin Plot', description: 'Density visualization' },
+  { id: 5, name: 'QQ Plot', description: 'Normality test' }
+];
 
 export default function Analysis({ sessionId, onComplete }: AnalysisProps) {
   const [loading, setLoading] = useState(false);
@@ -27,7 +39,11 @@ export default function Analysis({ sessionId, onComplete }: AnalysisProps) {
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
   const [univariatePlots, setUnivariatePlots] = useState<Record<string, string>>({});
   const [currentProcessingCol, setCurrentProcessingCol] = useState<string>('');
+  const [selectedPlotTypes, setSelectedPlotTypes] = useState<Set<UnivariatePlotType>>(new Set<UnivariatePlotType>([1]));
+  const [showPlotOptions, setShowPlotOptions] = useState(false);
   
+  // Correlation options
+  const [correlationMethod, setCorrelationMethod] = useState<CorrelationMethod>('pearson');
   const [pairplotUrl, setPairplotUrl] = useState<string>('');
 
   useEffect(() => {
@@ -52,6 +68,18 @@ export default function Analysis({ sessionId, onComplete }: AnalysisProps) {
     };
   }, [sessionId]);
 
+  const togglePlotType = (plotId: UnivariatePlotType) => {
+    setSelectedPlotTypes(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(plotId)) {
+        newSet.delete(plotId);
+      } else {
+        newSet.add(plotId);
+      }
+      return newSet;
+    });
+  };
+
   const toggleColumnSelection = (column: string) => {
     setSelectedColumns(prev => 
       prev.includes(column) 
@@ -71,7 +99,7 @@ export default function Analysis({ sessionId, onComplete }: AnalysisProps) {
   const generateHeatmap = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/plots/bivariate/heatmap/${sessionId}?method=pearson`);
+      const response = await fetch(`${API_BASE_URL}/plots/bivariate/heatmap/${sessionId}?method=${correlationMethod}`);
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       setHeatmapUrl(url);
@@ -82,23 +110,27 @@ export default function Analysis({ sessionId, onComplete }: AnalysisProps) {
     }
   };
 
-  // --- FIX: SEQUENTIAL GENERATION ---
+  // --- FIX: SEQUENTIAL GENERATION WITH PLOT TYPES ---
   const generateUnivariateBatch = async () => {
     if (selectedColumns.length === 0) return;
     setLoading(true);
     setUnivariatePlots({}); // Clear previous plots
+
+    // Build comma-separated list of plot types
+    const plotTypeList = Array.from(selectedPlotTypes).sort().join(',');
 
     // We use a simple for-loop with await to ensure sequential execution.
     // This prevents the backend's Matplotlib 'plt' state from overlapping.
     for (const col of selectedColumns) {
       setCurrentProcessingCol(col); // Show user which one is loading
       try {
-        const response = await fetch(`${API_BASE_URL}/plots/univariate/${sessionId}/${encodeURIComponent(col)}`);
+        const url = `${API_BASE_URL}/plots/univariate/${sessionId}/${encodeURIComponent(col)}?plot_types=${plotTypeList}`;
+        const response = await fetch(url);
         if (response.ok) {
           const blob = await response.blob();
-          const url = URL.createObjectURL(blob);
+          const objUrl = URL.createObjectURL(blob);
           // Update state immediately so user sees images pop in one by one
-          setUnivariatePlots(prev => ({ ...prev, [col]: url }));
+          setUnivariatePlots(prev => ({ ...prev, [col]: objUrl }));
         }
       } catch (error) {
         console.error(`Error generating plot for ${col}:`, error);
@@ -153,14 +185,42 @@ export default function Analysis({ sessionId, onComplete }: AnalysisProps) {
           <div className="bg-slate-50 rounded-xl p-4 sm:p-6 border border-slate-200">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3 sm:gap-0">
               <h3 className="text-base sm:text-lg font-semibold text-slate-800">Correlation Heatmap</h3>
-              <button
-                onClick={generateHeatmap}
-                disabled={loading}
-                className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center justify-center space-x-2 text-sm sm:text-base"
-              >
-                {loading && !heatmapUrl ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
-                <span>Generate</span>
-              </button>
+              <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
+                <div className="flex space-x-2">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="correlation"
+                      value="pearson"
+                      checked={correlationMethod === 'pearson'}
+                      onChange={(e) => setCorrelationMethod(e.target.value as CorrelationMethod)}
+                      disabled={loading}
+                      className="w-4 h-4 cursor-pointer disabled:opacity-50"
+                    />
+                    <span className="text-xs sm:text-sm text-slate-700">Pearson</span>
+                  </label>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="correlation"
+                      value="spearman"
+                      checked={correlationMethod === 'spearman'}
+                      onChange={(e) => setCorrelationMethod(e.target.value as CorrelationMethod)}
+                      disabled={loading}
+                      className="w-4 h-4 cursor-pointer disabled:opacity-50"
+                    />
+                    <span className="text-xs sm:text-sm text-slate-700">Spearman</span>
+                  </label>
+                </div>
+                <button
+                  onClick={generateHeatmap}
+                  disabled={loading}
+                  className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center justify-center space-x-2 text-sm sm:text-base"
+                >
+                  {loading && !heatmapUrl ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+                  <span>Generate</span>
+                </button>
+              </div>
             </div>
             {heatmapUrl && (
               <div className="rounded-lg overflow-hidden border border-slate-200 animate-fade-in relative group">
@@ -180,7 +240,7 @@ export default function Analysis({ sessionId, onComplete }: AnalysisProps) {
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3 sm:gap-0">
               <h3 className="text-base sm:text-lg font-semibold text-slate-800">Univariate Analysis</h3>
               <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 w-full sm:w-auto">
-                 <button
+                <button
                   onClick={toggleSelectAll}
                   disabled={loading}
                   className="w-full sm:w-auto px-3 py-1.5 text-xs sm:text-sm text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
@@ -197,6 +257,53 @@ export default function Analysis({ sessionId, onComplete }: AnalysisProps) {
                   <span>Generate Selected ({selectedColumns.length})</span>
                 </button>
               </div>
+            </div>
+
+            {/* Plot Type Selection */}
+            <div className="mb-4 sm:mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs sm:text-sm text-slate-500 font-medium">Plot Types:</p>
+                <button
+                  onClick={() => setShowPlotOptions(!showPlotOptions)}
+                  className="flex items-center space-x-1 text-xs text-indigo-600 hover:text-indigo-700 transition-colors"
+                >
+                  <Settings2 className="w-3 h-3" />
+                  <span>{showPlotOptions ? 'Hide' : 'Show'} Options</span>
+                </button>
+              </div>
+              
+              {showPlotOptions && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4 p-3 bg-white rounded-lg border border-slate-200 animate-fade-in">
+                  {UNIVARIATE_PLOT_OPTIONS.map((opt) => (
+                    <label key={opt.id} className="flex items-start space-x-3 p-2 hover:bg-indigo-50 rounded-lg cursor-pointer transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={selectedPlotTypes.has(opt.id as UnivariatePlotType)}
+                        onChange={() => togglePlotType(opt.id as UnivariatePlotType)}
+                        disabled={loading}
+                        className="w-4 h-4 mt-0.5 cursor-pointer disabled:opacity-50"
+                      />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-slate-700">{opt.name}</p>
+                        <p className="text-xs text-slate-500">{opt.description}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              {!showPlotOptions && (
+                <div className="flex flex-wrap gap-1 mb-4">
+                  {Array.from(selectedPlotTypes).sort().map((id) => {
+                    const opt = UNIVARIATE_PLOT_OPTIONS.find(o => o.id === id);
+                    return opt ? (
+                      <span key={id} className="inline-flex items-center space-x-1 px-2 py-1 bg-indigo-100 text-indigo-700 text-xs rounded-full">
+                        <span>{opt.name}</span>
+                      </span>
+                    ) : null;
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Column Selection Grid */}
