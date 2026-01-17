@@ -12,11 +12,12 @@ interface Column {
 
 interface ColumnManagerProps {
   sessionId: string;
+  aiMode: boolean;
   onComplete: () => void;
   onDataShapeChange: (shape: [number, number]) => void;
 }
 
-export default function ColumnManager({ sessionId, onComplete, onDataShapeChange }: ColumnManagerProps) {
+export default function ColumnManager({ sessionId, aiMode: _aiMode, onComplete, onDataShapeChange }: ColumnManagerProps) {
   const [columns, setColumns] = useState<Column[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());

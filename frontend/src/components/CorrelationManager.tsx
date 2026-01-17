@@ -1,26 +1,64 @@
 import { useState } from 'react';
 import { Loader2, Layers, ChevronRight, AlertTriangle } from 'lucide-react';
 import { API_BASE_URL } from '../config';
+import { validateStepWithAI } from '../utils/ai';
+import AIWarning from './AIWarning';
 
 interface CorrelationManagerProps {
   sessionId: string;
+  aiMode: boolean;
   onComplete: () => void;
 }
 
-export default function CorrelationManager({ sessionId, onComplete }: CorrelationManagerProps) {
+export default function CorrelationManager({ sessionId, aiMode, onComplete }: CorrelationManagerProps) {
   const [processing, setProcessing] = useState(false);
-  // Default threshold set to 0.90, but now mutable
   const [threshold, setThreshold] = useState(0.90);
+  const [showAIWarning, setShowAIWarning] = useState(false);
+  const [aiValidation, setAIValidation] = useState<any>(null);
 
   const handleAutoDrop = async () => {
+    if (aiMode && !aiValidation) {
+      // First, get preview of which columns will be dropped
+      setProcessing(true);
+      try {
+        console.log(`🔍 Fetching correlation preview for threshold: ${threshold}`);
+        const previewRes = await fetch(`${API_BASE_URL}/preview/correlation/${sessionId}?threshold=${threshold}`, {
+          method: 'POST',
+        });
+        const preview = await previewRes.json();
+        const columnsToDropList = preview.high_corr_cols || [];
+        console.log('📋 Preview result - Columns to drop:', columnsToDropList);
+
+        // Validate with AI, passing the actual columns that will be dropped
+        console.log('🤖 Sending to AI with columns:', columnsToDropList);
+        const validation = await validateStepWithAI(
+          sessionId,
+          'correlation',
+          `Drop columns with correlation > ${threshold}`,
+          columnsToDropList,
+        );
+        
+        if (validation) {
+          setAIValidation(validation);
+          setShowAIWarning(true);
+        }
+      } catch (error) {
+        console.error('Error getting correlation preview:', error);
+      }
+      setProcessing(false);
+      return;
+    }
+
+    // Proceed with actual action
     setProcessing(true);
+    setShowAIWarning(false);
     try {
       await fetch(`${API_BASE_URL}/clean/correlation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           session_id: sessionId,
-          threshold, // Pass the user-customized threshold
+          threshold,
           auto_drop: true,
         }),
       });
@@ -29,6 +67,7 @@ export default function CorrelationManager({ sessionId, onComplete }: Correlatio
       console.error('Error handling correlation:', error);
     } finally {
       setProcessing(false);
+      setAIValidation(null);
     }
   };
 
@@ -118,6 +157,22 @@ export default function CorrelationManager({ sessionId, onComplete }: Correlatio
             Skip This Step
           </button>
         </div>
+
+        {/* AI Warning Modal */}
+        {showAIWarning && aiValidation && (
+          <AIWarning
+            title="AI Review: Correlation Removal"
+            recommendation={aiValidation.recommendation}
+            warnings={aiValidation.warnings}
+            isRecommended={aiValidation.is_recommended}
+            loading={processing}
+            onProceed={handleAutoDrop}
+            onCancel={() => {
+              setShowAIWarning(false);
+              setAIValidation(null);
+            }}
+          />
+        )}
       </div>
     </div>
   );

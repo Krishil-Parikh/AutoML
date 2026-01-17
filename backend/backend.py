@@ -47,6 +47,7 @@ from encoding_utils import handle_categorical_encoding
 from scaling_utils import handle_feature_scaling
 from column_ops import drop_columns_by_id
 from storage import _load_df, _save_df, _log, _SESSION_LOGS
+from ai_utils import analyze_dataset, validate_step, cleanup_session
 from schemas import (
     DropColumnsModel, MissingValuesPlan, OutlierPlan, 
     CorrelationPlan, EncodingPlan, ScalingPlan
@@ -165,6 +166,10 @@ async def upload(file: UploadFile = File(...)):
         
         # Save to memory
         _save_df(session_id, df)
+        
+        # Analyze dataset with AI (store context for later validations)
+        await analyze_dataset(session_id, df)
+        
         info = get_df_info(df)
         
         return {
@@ -174,6 +179,70 @@ async def upload(file: UploadFile = File(...)):
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error uploading file: {str(e)}")
+
+
+# ==========================================
+# AI ANALYSIS & VALIDATION ENDPOINTS
+# ==========================================
+
+@app.post("/ai/analyze-dataset/{session_id}")
+async def ai_analyze_dataset(session_id: str):
+    """
+    Analyze dataset with AI and get insights.
+    Called right after upload if AI mode is enabled.
+    """
+    try:
+        df = _load_df(session_id)
+        insights = await analyze_dataset(session_id, df)
+        return insights
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/ai/validate-step")
+async def ai_validate_step(
+    session_id: str,
+    step_name: str,
+    action_description: str,
+    affected_columns: str = None,
+):
+    """
+    Validate a preprocessing step with AI.
+    Returns recommendation and warning if needed.
+    """
+    try:
+        print(f"\n🔵 [AI_VALIDATE_STEP] Received affected_columns (raw): {repr(affected_columns)}")
+        
+        # Parse affected_columns from JSON string if provided
+        columns_list = []
+        if affected_columns:
+            try:
+                columns_list = json.loads(affected_columns)
+                if isinstance(columns_list, str):
+                    columns_list = json.loads(columns_list)
+            except Exception as parse_err:
+                print(f"❌ Failed to parse affected_columns: {parse_err}")
+                columns_list = []
+        
+        print(f"🔵 [AI_VALIDATE_STEP] Parsed affected_columns: {columns_list}")
+        
+        validation = await validate_step(
+            session_id=session_id,
+            step_name=step_name,
+            action_description=action_description,
+            affected_columns=columns_list,
+        )
+        return validation
+    except Exception as e:
+        print(f"❌ [AI_VALIDATE_STEP] Error: {str(e)}")
+        return {"error": str(e), "is_recommended": True}  # Allow action if AI fails
+
+
+@app.post("/session/cleanup/{session_id}")
+async def cleanup_session_data(session_id: str):
+    """Clean up AI context when session ends."""
+    cleanup_session(session_id)
+    return {"status": "cleaned"}
 
 
 @app.get("/info/{session_id}")
@@ -225,21 +294,92 @@ async def api_missing_suggestions(session_id: str):
         pct = row['percentage_missing']
         dtype = df[col].dtype
         
+        reason = ""
         if pct > 50:
             action = 'drop_col'
+            reason = f"More than 50% values missing ({pct:.1f}%). Dropping avoids injecting noise via heavy imputation."
         elif str(dtype) in ['object', 'category']:
             action = 'mode'
+            reason = "Categorical feature — mode imputation preserves most frequent category without distorting numerical statistics."
         else:
             skew = df[col].dropna().skew() if df[col].dropna().size else 0
-            action = 'median' if abs(skew) > 1 else 'mean'
+            if abs(skew) > 1:
+                action = 'median'
+                reason = f"Numeric and skewed (skew={skew:.2f}) — median is robust to outliers."
+            else:
+                action = 'mean'
+                reason = f"Numeric and roughly symmetric (|skew|≤1, skew={skew:.2f}) — mean is appropriate."
         
         suggestions[row['id']] = {
             "column": col,
             "missing_pct": pct,
-            "suggested_action": action
+            "suggested_action": action,
+            "reason": reason,
         }
     
     return suggestions
+
+
+@app.post("/preview/missing/{session_id}")
+async def preview_missing(session_id: str, plan: dict = Body(None)):
+    """
+    Preview which columns will be dropped and which will be filled.
+    plan format: {"mean": [col_ids], "median": [col_ids], "drop_col": [col_ids], "mode": [col_ids]}
+    """
+    print(f"\n🔍 [PREVIEW_MISSING] session_id: {session_id}")
+    df = _load_df(session_id)
+    cols = list(df.columns)
+    
+    dropped_cols = []
+    filled_cols = []
+    dropped_details = []
+    filled_details = []
+    
+    if plan:
+        for action, ids in plan.items():
+            for cid in ids:
+                if not (1 <= cid <= len(cols)):
+                    continue
+                col = cols[cid-1]
+                
+                missing_pct = float(df[col].isnull().mean() * 100.0)
+                dtype = str(df[col].dtype)
+                if action == 'drop_col':
+                    dropped_cols.append(col)
+                    dropped_details.append({
+                        "column": col,
+                        "missing_pct": round(missing_pct, 2),
+                        "dtype": dtype,
+                        "reason": f"High missingness ({missing_pct:.1f}%). Dropping avoids biased imputations.",
+                    })
+                else:
+                    filled_cols.append(col)
+                    # Build reason similar to suggestions
+                    reason = ""
+                    if action == 'mode':
+                        reason = "Categorical feature — mode imputation preserves category distribution."
+                    elif action in ['mean', 'median']:
+                        skew = df[col].dropna().skew() if df[col].dropna().size else 0
+                        if action == 'median':
+                            reason = f"Skew={skew:.2f} — median is robust to outliers."
+                        else:
+                            reason = f"Skew={skew:.2f} — mean fits roughly symmetric distributions."
+                    filled_details.append({
+                        "column": col,
+                        "action": action,
+                        "missing_pct": round(missing_pct, 2),
+                        "dtype": dtype,
+                        "filled_count": int(df[col].isnull().sum()),
+                        "reason": reason,
+                    })
+    
+    print(f"✅ [PREVIEW_MISSING] Dropped: {dropped_cols}, Filled: {filled_cols}")
+    return {
+        "dropped_columns": dropped_cols,
+        "filled_columns": filled_cols,
+        "dropped_details": dropped_details,
+        "filled_details": filled_details,
+    }
 
 
 @app.post("/clean/missing")
@@ -312,13 +452,82 @@ async def api_outliers_suggestions(session_id: str):
         if cnt > 0:
             col_id = df.columns.get_loc(col) + 1
             action = 'remove_rows' if pct > 10 else 'cap'
+            reason = (
+                f"High outlier rate ({pct:.1f}%) — removing rows prevents extreme values from skewing the dataset."
+                if action == 'remove_rows'
+                else "Moderate outlier rate — cap values to IQR bounds to reduce impact without losing rows."
+            )
             suggestions[col_id] = {
                 "column": col,
                 "outliers_pct": round(pct, 2),
-                "suggested_action": action
+                "suggested_action": action,
+                "reason": reason,
             }
     
     return suggestions
+
+
+@app.post("/preview/outliers/{session_id}")
+async def preview_outliers(session_id: str, plan: dict = Body(None)):
+    """Preview which columns will be affected by outlier handling."""
+    print(f"\n🔍 [PREVIEW_OUTLIERS] session_id: {session_id}")
+    df = _load_df(session_id)
+    cols = list(df.columns)
+    
+    capped_cols = []
+    removed_cols = []
+    capped_details = []
+    removed_details = []
+    
+    if plan:
+        for action, ids in plan.items():
+            for cid in ids:
+                if not (1 <= cid <= len(cols)):
+                    continue
+                col = cols[cid-1]
+                
+                # Compute IQR bounds for details
+                if pd.api.types.is_numeric_dtype(df[col]):
+                    Q1 = df[col].quantile(0.25)
+                    Q3 = df[col].quantile(0.75)
+                    IQR = Q3 - Q1
+                    lower, upper = Q1 - 1.5*IQR, Q3 + 1.5*IQR
+                    outlier_mask = (df[col] < lower) | (df[col] > upper)
+                    out_cnt = int(outlier_mask.sum())
+                    out_pct = float((out_cnt / len(df)) * 100) if len(df) else 0.0
+                else:
+                    lower = upper = None
+                    out_cnt = 0
+                    out_pct = 0.0
+
+                if action == 'cap':
+                    capped_cols.append(col)
+                    capped_details.append({
+                        "column": col,
+                        "lower": lower,
+                        "upper": upper,
+                        "outliers_count": out_cnt,
+                        "outliers_pct": round(out_pct, 2),
+                        "reason": "Cap values to IQR bounds to reduce impact of extreme values without losing rows.",
+                    })
+                elif action == 'remove_rows':
+                    removed_cols.append(col)
+                    removed_details.append({
+                        "column": col,
+                        "lower": lower,
+                        "upper": upper,
+                        "rows_to_remove": out_cnt,
+                        "outliers_pct": round(out_pct, 2),
+                        "reason": "High outlier rate — remove rows outside IQR bounds to prevent skew.",
+                    })
+    
+    print(f"✅ [PREVIEW_OUTLIERS] Capped: {capped_cols}, Rows removed by: {removed_cols}")
+    return {
+        "capped_columns": capped_cols,
+        "columns_with_rows_removed": removed_cols,
+        "capped_details": capped_details,
+        "removed_details": removed_details,
+    }
 
 
 @app.post("/clean/outliers")
@@ -360,6 +569,25 @@ async def api_outliers_apply(payload: OutlierPlan):
 # ==========================================
 # CORRELATION & MULTICOLLINEARITY ENDPOINTS
 # ==========================================
+
+@app.post("/preview/correlation/{session_id}")
+async def preview_corr(session_id: str, threshold: float = 0.9):
+    """Preview which columns would be dropped for correlation without actually dropping them."""
+    print(f"\n🔍 [PREVIEW_CORRELATION] session_id: {session_id}, threshold: {threshold}")
+    df = _load_df(session_id)
+    nums = df.select_dtypes(include=['float64', 'int64']).columns
+    
+    if len(nums) < 2:
+        print(f"⚠️  Not enough numeric columns: {len(nums)}")
+        return {"high_corr_cols": [], "message": "not enough numeric columns"}
+    
+    corr_matrix = df[nums].corr().abs()
+    upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+    high_corr_cols = [c for c in upper.columns if any(upper[c] > threshold)]
+    
+    print(f"✅ [PREVIEW_CORRELATION] Found {len(high_corr_cols)} highly correlated columns: {high_corr_cols}")
+    return {"high_corr_cols": high_corr_cols}
+
 
 @app.post("/clean/correlation")
 async def api_corr(payload: CorrelationPlan):
@@ -417,6 +645,32 @@ async def api_encoding_suggestions(session_id: str):
         }
     
     return suggestions
+
+
+@app.post("/preview/encoding/{session_id}")
+async def preview_encoding(session_id: str, plan: dict = Body(None)):
+    """Preview which columns will be label-encoded vs one-hot-encoded."""
+    print(f"\n🔍 [PREVIEW_ENCODING] session_id: {session_id}")
+    df = _load_df(session_id)
+    cols = list(df.columns)
+    
+    label_encoded = []
+    onehot_encoded = []
+    
+    if plan:
+        for action, ids in plan.items():
+            for cid in ids:
+                if not (1 <= cid <= len(cols)):
+                    continue
+                col = cols[cid-1]
+                
+                if action == 'label':
+                    label_encoded.append(col)
+                elif action == 'onehot':
+                    onehot_encoded.append(col)
+    
+    print(f"✅ [PREVIEW_ENCODING] Label: {label_encoded}, OneHot: {onehot_encoded}")
+    return {"label_encoded_columns": label_encoded, "onehot_encoded_columns": onehot_encoded}
 
 
 @app.post("/clean/encoding")

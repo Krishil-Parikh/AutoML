@@ -1,24 +1,31 @@
 import { useState, useEffect } from 'react';
 import { Loader2, TrendingUp, ChevronRight, Lightbulb, CheckCircle } from 'lucide-react';
 import { API_BASE_URL } from '../config';
+import { validateStepWithAI } from '../utils/ai';
+import AIWarning from './AIWarning';
 
 interface Suggestion {
   column: string;
   outliers_pct: number;
   suggested_action: string;
+  reason?: string;
 }
 
 interface OutliersManagerProps {
   sessionId: string;
+  aiMode: boolean;
   onComplete: () => void;
 }
 
-export default function OutliersManager({ sessionId, onComplete }: OutliersManagerProps) {
+export default function OutliersManager({ sessionId, aiMode: _aiMode, onComplete }: OutliersManagerProps): JSX.Element | null {
   const [suggestions, setSuggestions] = useState<Record<number, Suggestion>>({});
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [plan, setPlan] = useState<Record<string, number[]>>({});
   const [customizing, setCustomizing] = useState(false);
+  const [showAIWarning, setShowAIWarning] = useState(false);
+  const [aiValidation, setAIValidation] = useState<any>(null);
+  const [plannedDetails, setPlannedDetails] = useState<string[]>([]);
 
   useEffect(() => {
     fetchSuggestions();
@@ -63,6 +70,51 @@ export default function OutliersManager({ sessionId, onComplete }: OutliersManag
   };
 
   const handleApply = async () => {
+    if (_aiMode && !aiValidation) {
+      // Get preview and validate with AI
+      setProcessing(true);
+      try {
+        console.log('🔍 Fetching outliers preview');
+        const previewRes = await fetch(`${API_BASE_URL}/preview/outliers/${sessionId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(plan),
+        });
+        const preview = await previewRes.json();
+        console.log('📋 Preview - Capped:', preview.capped_columns, 'Rows removed from:', preview.columns_with_rows_removed);
+
+        const affectedCols = [...(preview.capped_columns || []), ...(preview.columns_with_rows_removed || [])];
+        const capDetails: string[] = (preview.capped_details || []).map((d: any) =>
+          `Cap ${d.column} to [${d.lower?.toFixed?.(3) ?? d.lower}, ${d.upper?.toFixed?.(3) ?? d.upper}] (outliers: ${d.outliers_pct}% / ${d.outliers_count}). ${d.reason || ''}`.trim()
+        );
+        const removeDetails: string[] = (preview.removed_details || []).map((d: any) =>
+          `Remove ~${d.rows_to_remove} rows due to ${d.column} outside [${d.lower?.toFixed?.(3) ?? d.lower}, ${d.upper?.toFixed?.(3) ?? d.upper}] (outliers: ${d.outliers_pct}%). ${d.reason || ''}`.trim()
+        );
+        const detailsList = [...capDetails, ...removeDetails];
+        setPlannedDetails(detailsList);
+
+        const actionDesc = `Handle outliers with specific techniques. Caps: ${capDetails.join('; ') || 'none'}. Row removals: ${removeDetails.join('; ') || 'none'}.`;
+        
+        console.log('🤖 Sending to AI with affected columns:', affectedCols);
+        const validation = await validateStepWithAI(
+          sessionId,
+          'outliers',
+          actionDesc,
+          affectedCols,
+        );
+        
+        if (validation) {
+          setAIValidation(validation);
+          setShowAIWarning(true);
+        }
+      } catch (error) {
+        console.error('Error getting outliers preview:', error);
+      }
+      setProcessing(false);
+      return;
+    }
+ 
+    // Proceed with actual action (keep modal open with loading state)
     setProcessing(true);
     try {
       await fetch(`${API_BASE_URL}/clean/outliers`, {
@@ -78,6 +130,8 @@ export default function OutliersManager({ sessionId, onComplete }: OutliersManag
       console.error('Error applying plan:', error);
     } finally {
       setProcessing(false);
+      setAIValidation(null);
+      setShowAIWarning(false);
     }
   };
 
@@ -94,7 +148,7 @@ export default function OutliersManager({ sessionId, onComplete }: OutliersManag
   }
 
   const getActionForColumn = (colId: number) => {
-    for (const [action, ids] of Object.entries(plan)) {
+    for (const [action, ids] of Object.entries(plan) as [string, number[]][]) {
       if (ids.includes(colId)) return action;
     }
     return 'cap';
@@ -185,6 +239,9 @@ export default function OutliersManager({ sessionId, onComplete }: OutliersManag
                         </span>
                       </div>
                     )}
+                    {sug.reason && (
+                      <p className="text-xs text-slate-500 mt-2">Reason: {sug.reason}</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -210,6 +267,23 @@ export default function OutliersManager({ sessionId, onComplete }: OutliersManag
           )}
         </button>
       </div>
+
+      {showAIWarning && aiValidation && (
+        <AIWarning
+          title="AI Outliers Analysis"
+          recommendation={aiValidation.recommendation}
+          warnings={aiValidation.warnings}
+          isRecommended={aiValidation.is_recommended}
+          details={plannedDetails}
+          onProceed={() => handleApply()}
+          onCancel={() => {
+            setShowAIWarning(false);
+            setAIValidation(null);
+            setPlannedDetails([]);
+          }}
+          loading={processing}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Loader2, Settings, ChevronRight, Lightbulb, CheckCircle } from 'lucide-react';
 import { API_BASE_URL } from '../config';
+import { validateStepWithAI } from '../utils/ai';
+import AIWarning from './AIWarning';
 
 interface Suggestion {
   column: string;
@@ -10,15 +12,18 @@ interface Suggestion {
 
 interface EncodingManagerProps {
   sessionId: string;
+  aiMode: boolean;
   onComplete: () => void;
 }
 
-export default function EncodingManager({ sessionId, onComplete }: EncodingManagerProps) {
+export default function EncodingManager({ sessionId, aiMode, onComplete }: EncodingManagerProps): JSX.Element | null {
   const [suggestions, setSuggestions] = useState<Record<number, Suggestion>>({});
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [plan, setPlan] = useState<Record<string, number[]>>({});
   const [customizing, setCustomizing] = useState(false);
+  const [showAIWarning, setShowAIWarning] = useState(false);
+  const [aiValidation, setAIValidation] = useState<any>(null);
 
   useEffect(() => {
     fetchSuggestions();
@@ -63,6 +68,58 @@ export default function EncodingManager({ sessionId, onComplete }: EncodingManag
   };
 
   const handleApply = async () => {
+    if (aiMode && !aiValidation) {
+      // Preview impact
+      setProcessing(true);
+      try {
+        const previewRes = await fetch(
+          `${API_BASE_URL}/preview/encoding/${sessionId}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(plan),
+          }
+        );
+        const preview = await previewRes.json();
+        const affectedCols = [
+          ...(preview.label_encoded_columns || []),
+          ...(preview.onehot_encoded_columns || []),
+        ];
+
+        // Validate with AI
+        const actionDesc = `Apply encoding: ${
+          plan.label_encode?.length > 0
+            ? `label encode ${plan.label_encode.length} column(s)`
+            : ''
+        }${
+          plan.label_encode?.length > 0 && plan.onehot_encode?.length > 0
+            ? ' and '
+            : ''
+        }${
+          plan.onehot_encode?.length > 0
+            ? `one-hot encode ${plan.onehot_encode.length} column(s)`
+            : ''
+        }`;
+
+        const validation = await validateStepWithAI(
+          sessionId,
+          'encoding',
+          actionDesc,
+          affectedCols
+        );
+        if (validation) {
+          setAIValidation(validation);
+          setShowAIWarning(true);
+        }
+      } catch (error) {
+        console.error('Error previewing encoding:', error);
+      } finally {
+        setProcessing(false);
+      }
+      return;
+    }
+
+    // Proceed with action (if no AI or user clicked proceed) - keep modal visible
     setProcessing(true);
     try {
       await fetch(`${API_BASE_URL}/clean/encoding`, {
@@ -78,6 +135,8 @@ export default function EncodingManager({ sessionId, onComplete }: EncodingManag
       console.error('Error applying plan:', error);
     } finally {
       setProcessing(false);
+      setAIValidation(null);
+      setShowAIWarning(false);
     }
   };
 

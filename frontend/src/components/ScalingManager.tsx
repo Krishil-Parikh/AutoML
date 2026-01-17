@@ -10,10 +10,11 @@ interface Suggestion {
 
 interface ScalingManagerProps {
   sessionId: string;
+  aiMode: boolean;
   onComplete: () => void;
 }
 
-export default function ScalingManager({ sessionId, onComplete }: ScalingManagerProps) {
+export default function ScalingManager({ sessionId, aiMode: _aiMode, onComplete }: ScalingManagerProps) {
   const [suggestions, setSuggestions] = useState<Record<number, Suggestion>>({});
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);

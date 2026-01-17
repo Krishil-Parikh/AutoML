@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { Upload, FileText, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Upload, FileText, Loader2, CheckCircle, AlertCircle, Zap } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 
 interface FileUploadProps {
-  onComplete: (sessionId: string, shape: [number, number]) => void;
+  onComplete: (sessionId: string, shape: [number, number], aiMode: boolean) => void;
 }
 
 export default function FileUpload({ onComplete }: FileUploadProps) {
@@ -11,6 +11,7 @@ export default function FileUpload({ onComplete }: FileUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string>('');
   const [dragActive, setDragActive] = useState(false);
+  const [aiMode, setAiMode] = useState(false);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -57,7 +58,7 @@ export default function FileUpload({ onComplete }: FileUploadProps) {
       if (!response.ok) throw new Error('Upload failed');
 
       const data = await response.json();
-      onComplete(data.session_id, data.shape);
+      onComplete(data.session_id, data.shape, aiMode);
     } catch (err) {
       setError('Failed to upload file. Please try again.');
     } finally {
@@ -109,6 +110,27 @@ export default function FileUpload({ onComplete }: FileUploadProps) {
             <p className="text-sm text-red-700">{error}</p>
           </div>
         )}
+
+        {/* AI Mode Toggle */}
+        <div className="mt-6 sm:mt-8 p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border border-purple-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-semibold text-slate-800 text-sm sm:text-base">🤖 AI-Powered Analysis</p>
+              <p className="text-xs sm:text-sm text-slate-600 mt-1">Get smart recommendations at each step</p>
+            </div>
+            <button
+              onClick={() => setAiMode(!aiMode)}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition-all duration-300 ${
+                aiMode
+                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
+                  : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              <Zap className="w-4 h-4" />
+              <span className="text-xs sm:text-sm">{aiMode ? 'AI ON' : 'AI OFF'}</span>
+            </button>
+          </div>
+        </div>
 
         {file && (
           <button

@@ -21,6 +21,7 @@ function App() {
   const [currentStep, setCurrentStep] = useState<Step>('upload');
   const [sessionId, setSessionId] = useState<string>('');
   const [dataShape, setDataShape] = useState<[number, number] | null>(null);
+  const [aiMode, setAiMode] = useState(false);
 
   const steps: { id: Step; label: string; icon: any }[] = [
     { id: 'upload', label: 'Upload', icon: Upload },
@@ -34,9 +35,10 @@ function App() {
     { id: 'download', label: 'Download', icon: Download },
   ];
 
-  const handleUploadComplete = (id: string, shape: [number, number]) => {
+  const handleUploadComplete = (id: string, shape: [number, number], aiModeEnabled: boolean) => {
     setSessionId(id);
     setDataShape(shape);
+    setAiMode(aiModeEnabled);
     setCurrentStep('columns');
   };
 
@@ -106,25 +108,25 @@ function App() {
               <FileUpload onComplete={handleUploadComplete} />
             )}
             {currentStep === 'columns' && sessionId && (
-              <ColumnManager sessionId={sessionId} onComplete={() => handleStepComplete('missing')} onDataShapeChange={setDataShape} />
+              <ColumnManager sessionId={sessionId} aiMode={aiMode} onComplete={() => handleStepComplete('missing')} onDataShapeChange={setDataShape} />
             )}
             {currentStep === 'missing' && sessionId && (
-              <MissingValuesManager sessionId={sessionId} onComplete={() => handleStepComplete('outliers')} />
+              <MissingValuesManager sessionId={sessionId} aiMode={aiMode} onComplete={() => handleStepComplete('outliers')} />
             )}
             {currentStep === 'outliers' && sessionId && (
-              <OutliersManager sessionId={sessionId} onComplete={() => handleStepComplete('correlation')} />
+              <OutliersManager sessionId={sessionId} aiMode={aiMode} onComplete={() => handleStepComplete('correlation')} />
             )}
             {currentStep === 'correlation' && sessionId && (
-              <CorrelationManager sessionId={sessionId} onComplete={() => handleStepComplete('encoding')} />
+              <CorrelationManager sessionId={sessionId} aiMode={aiMode} onComplete={() => handleStepComplete('encoding')} />
             )}
             {currentStep === 'encoding' && sessionId && (
-              <EncodingManager sessionId={sessionId} onComplete={() => handleStepComplete('scaling')} />
+              <EncodingManager sessionId={sessionId} aiMode={aiMode} onComplete={() => handleStepComplete('scaling')} />
             )}
             {currentStep === 'scaling' && sessionId && (
-              <ScalingManager sessionId={sessionId} onComplete={() => handleStepComplete('analysis')} />
+              <ScalingManager sessionId={sessionId} aiMode={aiMode} onComplete={() => handleStepComplete('analysis')} />
             )}
             {currentStep === 'analysis' && sessionId && (
-              <Analysis sessionId={sessionId} onComplete={() => handleStepComplete('download')} />
+              <Analysis sessionId={sessionId} aiMode={aiMode} onComplete={() => handleStepComplete('download')} />
             )}
             {currentStep === 'download' && sessionId && (
               <DownloadSection sessionId={sessionId} />

@@ -14,6 +14,7 @@ import { API_BASE_URL } from '../config';
 
 interface AnalysisProps {
   sessionId: string;
+  aiMode: boolean;
   onComplete: () => void;
 }
 
@@ -29,10 +30,9 @@ const UNIVARIATE_PLOT_OPTIONS = [
   { id: 5, name: 'QQ Plot', description: 'Normality test' }
 ];
 
-export default function Analysis({ sessionId, onComplete }: AnalysisProps) {
+export default function Analysis({ sessionId, aiMode: _aiMode, onComplete }: AnalysisProps) {
   const [loading, setLoading] = useState(false);
   const [heatmapUrl, setHeatmapUrl] = useState<string>('');
-  const [columns, setColumns] = useState<Array<{ id: number; column_name: string; dtype: string }>>([]);
   const [numericColumns, setNumericColumns] = useState<string[]>([]);
   
   // State for multi-select univariate
@@ -54,7 +54,6 @@ export default function Analysis({ sessionId, onComplete }: AnalysisProps) {
         const data = await res.json();
         if (!active) return;
         const cols = (data?.columns ?? []) as Array<{ id: number; column_name: string; dtype: string }>;
-        setColumns(cols);
         const nums = cols
           .filter((c) => typeof c.dtype === 'string' && /(int|float)/i.test(c.dtype))
           .map((c) => c.column_name);

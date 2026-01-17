@@ -1,24 +1,31 @@
 import { useState, useEffect } from 'react';
 import { Loader2, AlertCircle, ChevronRight, Lightbulb, CheckCircle } from 'lucide-react';
 import { API_BASE_URL } from '../config';
+import { validateStepWithAI } from '../utils/ai';
+import AIWarning from './AIWarning';
 
 interface Suggestion {
   column: string;
   missing_pct: number;
   suggested_action: string;
+  reason?: string;
 }
 
 interface MissingValuesManagerProps {
   sessionId: string;
+  aiMode: boolean;
   onComplete: () => void;
 }
 
-export default function MissingValuesManager({ sessionId, onComplete }: MissingValuesManagerProps) {
+export default function MissingValuesManager({ sessionId, aiMode: _aiMode, onComplete }: MissingValuesManagerProps): JSX.Element | null {
   const [suggestions, setSuggestions] = useState<Record<number, Suggestion>>({});
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [plan, setPlan] = useState<Record<string, number[]>>({});
   const [customizing, setCustomizing] = useState(false);
+  const [showAIWarning, setShowAIWarning] = useState(false);
+  const [aiValidation, setAIValidation] = useState<any>(null);
+  const [plannedDetails, setPlannedDetails] = useState<string[]>([]);
 
   useEffect(() => {
     fetchSuggestions();
@@ -63,6 +70,52 @@ export default function MissingValuesManager({ sessionId, onComplete }: MissingV
   };
 
   const handleApply = async () => {
+    if (_aiMode && !aiValidation) {
+      // Get preview and validate with AI
+      setProcessing(true);
+      try {
+        console.log('🔍 Fetching missing values preview');
+        const previewRes = await fetch(`${API_BASE_URL}/preview/missing/${sessionId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(plan),
+        });
+        const preview = await previewRes.json();
+        console.log('📋 Preview - Dropped:', preview.dropped_columns, 'Filled:', preview.filled_columns);
+        const affectedCols = [...(preview.dropped_columns || []), ...(preview.filled_columns || [])];
+
+        // Build detailed description and UI details
+        const fillDetails: string[] = (preview.filled_details || []).map((d: any) =>
+          `Fill ${d.column} with ${d.action} (${d.missing_pct}% missing, ${d.dtype}). ${d.reason || ''}`.trim()
+        );
+        const dropDetails: string[] = (preview.dropped_details || []).map((d: any) =>
+          `Drop ${d.column} (${d.missing_pct}% missing, ${d.dtype}). ${d.reason || ''}`.trim()
+        );
+        const detailsList = [...dropDetails, ...fillDetails];
+        setPlannedDetails(detailsList);
+
+        const actionDesc = `Handle missing values with specific techniques. Drops: ${dropDetails.join('; ') || 'none'}. Fills: ${fillDetails.join('; ') || 'none'}.`;
+        
+        console.log('🤖 Sending to AI with affected columns:', affectedCols);
+        const validation = await validateStepWithAI(
+          sessionId,
+          'missing_values',
+          actionDesc,
+          affectedCols,
+        );
+        
+        if (validation) {
+          setAIValidation(validation);
+          setShowAIWarning(true);
+        }
+      } catch (error) {
+        console.error('Error getting missing values preview:', error);
+      }
+      setProcessing(false);
+      return;
+    }
+
+    // Proceed with actual action (keep modal open with loading state)
     setProcessing(true);
     try {
       await fetch(`${API_BASE_URL}/clean/missing`, {
@@ -78,8 +131,11 @@ export default function MissingValuesManager({ sessionId, onComplete }: MissingV
       console.error('Error applying plan:', error);
     } finally {
       setProcessing(false);
+      setAIValidation(null);
+      setShowAIWarning(false);
     }
   };
+
 
   if (loading) {
     return (
@@ -94,7 +150,7 @@ export default function MissingValuesManager({ sessionId, onComplete }: MissingV
   }
 
   const getActionForColumn = (colId: number) => {
-    for (const [action, ids] of Object.entries(plan)) {
+    for (const [action, ids] of Object.entries(plan) as [string, number[]][]) {
       if (ids.includes(colId)) return action;
     }
     return 'mean';
@@ -184,6 +240,9 @@ export default function MissingValuesManager({ sessionId, onComplete }: MissingV
                         </span>
                       </div>
                     )}
+                    {sug.reason && (
+                      <p className="text-xs text-slate-500 mt-2">Reason: {sug.reason}</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -209,6 +268,23 @@ export default function MissingValuesManager({ sessionId, onComplete }: MissingV
           )}
         </button>
       </div>
+
+      {showAIWarning && aiValidation && (
+        <AIWarning
+          title="AI Missing Values Analysis"
+          recommendation={aiValidation.recommendation}
+          warnings={aiValidation.warnings}
+          isRecommended={aiValidation.is_recommended}
+          details={plannedDetails}
+          onProceed={() => handleApply()}
+          onCancel={() => {
+            setShowAIWarning(false);
+            setAIValidation(null);
+            setPlannedDetails([]);
+          }}
+          loading={processing}
+        />
+      )}
     </div>
   );
 }
