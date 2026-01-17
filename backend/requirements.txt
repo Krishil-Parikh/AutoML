@@ -11,3 +11,4 @@ pydantic
 pymongo
 httpx
 apscheduler
+dotenv
